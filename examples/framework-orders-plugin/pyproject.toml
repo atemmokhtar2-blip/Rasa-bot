@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "framework-orders-plugin"
+version = "1.0.0"
+description = "Specification 05 example plugin"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.entry-points."rasa_bot.plugins"]
+orders = "framework_orders_plugin:PLUGIN_MANIFEST"

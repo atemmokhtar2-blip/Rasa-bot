@@ -4,6 +4,12 @@ from framework.errors import FrameworkError
 class SecretProvider:
     def get(self, name: str) -> str | None: raise NotImplementedError
 
+class InMemorySecretProvider(SecretProvider):
+    def __init__(self): self._values: dict[str, str] = {}
+    def set(self, name: str, value: str) -> None: self._values[name] = value
+    def get(self, name: str) -> str | None: return self._values.get(name)
+    def delete(self, name: str) -> None: self._values.pop(name, None)
+
 class EnvironmentSecretProvider(SecretProvider):
     def __init__(self, environ: dict[str, str] | None = None): self.environ = environ or os.environ
     def get(self, name: str) -> str | None: return self.environ.get(name)

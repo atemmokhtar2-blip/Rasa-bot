@@ -3,7 +3,7 @@ from framework.learning.continuous import CandidateStatus, InteractionCollection
 
 def test_interactions_are_redacted_and_not_training_candidates_automatically():
     service = InteractionCollectionService(low_confidence_threshold=0.55, high_confidence_error_threshold=0.9)
-    interaction = service.collect(project_id="p1", session_id="s1", language="ar", input_text="مرحبا bot_token=8996700328:AASecretTokenLongValue", predicted_intent="greet", confidence=0.4, metadata={"api_key": "private"})
+    interaction = service.collect(project_id="p1", session_id="s1", language="ar", input_text="مرحبا bot_token=[REDACTED_TEST_TOKEN]", predicted_intent="greet", confidence=0.4, metadata={"api_key": "private"})
     assert "8996700328:" not in interaction.input_text and interaction.metadata["api_key"] == "[REDACTED]"
     assert service.list_candidates("p1") == []
 

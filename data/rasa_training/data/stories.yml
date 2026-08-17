@@ -1,0 +1,20 @@
+version: "3.1"
+stories:
+  - story: greet and goodbye
+    steps:
+      - intent: greet
+      - action: utter_greet
+      - intent: goodbye
+      - action: utter_goodbye
+  - story: ask order status
+    steps:
+      - intent: get_order_status
+      - action: utter_ask_order_id
+  - story: cancel order
+    steps:
+      - intent: cancel_order
+      - action: utter_greet
+  - story: book appointment
+    steps:
+      - intent: book
+      - action: utter_greet

@@ -6,7 +6,7 @@ from framework.infrastructure.sql import BotORM
 class PersistentBotRegistry:
     def __init__(self, repository: BotRepository): self.repository = repository
     async def register(self, bot: TelegramBot) -> TelegramBot:
-        row = await self.repository.save(BotORM(id=bot.id, project_id=bot.project_id, name=bot.name, token_secret_ref=bot.token_secret_ref, status=bot.status, webhook_url=bot.webhook_url, metadata_json=bot.metadata))
+        row = await self.repository.save(BotORM(id=bot.id, project_id=bot.project_id, name=bot.name, token_secret_ref=bot.token_secret_ref, status=bot.status, webhook_url=bot.webhook_url, webhook_secret_ref=bot.webhook_secret_ref, metadata_json=bot.metadata))
         return self._domain(row)
     async def list_for_project(self, project_id: str) -> list[TelegramBot]:
         rows = await self.repository.list_project(project_id)
@@ -25,4 +25,4 @@ class PersistentBotRegistry:
         return self._domain(await self.repository.set_status(bot_id, status))
     @staticmethod
     def _domain(row: BotORM) -> TelegramBot:
-        return TelegramBot(row.project_id, row.name, row.token_secret_ref, id=row.id, status=row.status, webhook_url=row.webhook_url, metadata=dict(row.metadata_json or {}), created_at=row.created_at)
+        return TelegramBot(row.project_id, row.name, row.token_secret_ref, id=row.id, status=row.status, webhook_url=row.webhook_url, webhook_secret_ref=row.webhook_secret_ref, metadata=dict(row.metadata_json or {}), created_at=row.created_at)

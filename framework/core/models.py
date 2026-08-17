@@ -137,6 +137,7 @@ class ActionContext:
     processing: ProcessingContext
     permissions: set[str] = field(default_factory=set)
     metadata: dict[str, Any] = field(default_factory=dict)
+    tools: Any = None
     def __getitem__(self, key: str) -> Any:
         values = {"message": self.processing.message, "intent": self.processing.nlu_result.intent if self.processing.nlu_result else None, "entities": self.processing.nlu_result.entities if self.processing.nlu_result else [], "context": self.processing.metadata, "session": self.processing.session, "processing": self.processing}
         return values[key]

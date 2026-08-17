@@ -13,6 +13,8 @@ class APIKeyCreation:
     secret: str
     project_id: str
     environment: str
+    prefix: str = ""
+    key_type: str = "development"
 
 class DeveloperService:
     def __init__(self, database: SQLDatabase | None = None, pepper: str = ""):
@@ -32,7 +34,7 @@ class DeveloperService:
 
     @staticmethod
     def _project_record(row: ProjectORM) -> ProjectRecord:
-        return ProjectRecord(id=row.id, name=row.name, owner_id=row.owner_id, description=row.description, environment=row.environment, status=row.status, created_at=row.created_at, updated_at=row.updated_at)
+        return ProjectRecord(id=row.id, name=row.name, owner_id=row.owner_id, description=row.description, environment=row.environment, status=row.status, created_at=row.created_at, updated_at=row.updated_at, configuration=dict(row.configuration or {}))
 
     async def list_developers(self) -> list[DeveloperRecord]:
         if not self.database:
@@ -72,7 +74,7 @@ class DeveloperService:
             return self._project_record(row)
 
     async def update_project(self, project_id: str, **values) -> ProjectRecord:
-        allowed = {"name", "description", "environment", "status"}
+        allowed = {"name", "description", "environment", "status", "configuration"}
         values = {key: value for key, value in values.items() if key in allowed and value is not None}
         if not self.database:
             row = await self.get_project(project_id)
@@ -90,26 +92,26 @@ class DeveloperService:
     async def create_project(self, owner_id: str, name: str, description: str = "", environment: str = "development") -> ProjectRecord:
         if not self.database:
             if await self.developers.get(owner_id) is None: raise NotFoundError("Developer not found")
-            return await self.projects.create(ProjectRecord(name=name, owner_id=owner_id, description=description, environment=environment))
+            return await self.projects.create(ProjectRecord(name=name, owner_id=owner_id, description=description, environment=environment, configuration={"default_language": "ar", "fallback_policy": "clarify", "session_timeout": 30, "rate_limits": {}, "quotas": {"monthly_requests": 100000, "daily_requests": 10000, "training_jobs": 100, "bots": 10, "projects": 10}, "enabled_features": []}))
         async with self.database.session() as session:
             owner = (await session.execute(select(DeveloperORM).where(DeveloperORM.id == owner_id))).scalar_one_or_none()
             if owner is None: raise NotFoundError("Developer not found")
-            record = ProjectORM(id=secrets.token_urlsafe(16), owner_id=owner_id, name=name, description=description, environment=environment, status="active", configuration={})
+            record = ProjectORM(id=secrets.token_urlsafe(16), owner_id=owner_id, name=name, description=description, environment=environment, status="active", configuration={"default_language": "ar", "fallback_policy": "clarify", "session_timeout": 30, "rate_limits": {}, "quotas": {"monthly_requests": 100000, "daily_requests": 10000, "training_jobs": 100, "bots": 10, "projects": 10}, "enabled_features": []})
             session.add(record); await session.commit()
         return self._project_record(record)
 
-    async def create_api_key(self, developer_id: str, project_id: str, environment: str, permissions: set[str]) -> APIKeyCreation:
-        secret, digest = generate_api_key(self.pepper); key_id = "key_" + secrets.token_urlsafe(12)
+    async def create_api_key(self, developer_id: str, project_id: str, environment: str, permissions: set[str], *, name: str = "default", key_type: str = "development", expires_at: datetime | None = None, metadata: dict | None = None) -> APIKeyCreation:
+        secret, digest = generate_api_key(self.pepper, key_type); key_id = "key_" + secrets.token_urlsafe(12); prefix = "_".join(secret.split("_")[:2]) + "_"
         if not self.database:
             project = await self.projects.get(project_id)
             if project is None or project.owner_id != developer_id: raise NotFoundError("Project not found for developer")
-            self.api_keys[key_id] = APIKeyRecord(key_id=key_id, developer_id=developer_id, project_id=project_id, environment=environment, secret_hash=digest, permissions=permissions)
-            return APIKeyCreation(key_id, secret, project_id, environment)
+            self.api_keys[key_id] = APIKeyRecord(key_id=key_id, developer_id=developer_id, project_id=project_id, environment=environment, secret_hash=digest, permissions=permissions, expires_at=expires_at, name=name, prefix=prefix, key_type=key_type, metadata=metadata or {})
+            return APIKeyCreation(key_id, secret, project_id, environment, prefix, key_type)
         async with self.database.session() as session:
             project = (await session.execute(select(ProjectORM).where(ProjectORM.id == project_id, ProjectORM.owner_id == developer_id))).scalar_one_or_none()
             if project is None: raise NotFoundError("Project not found for developer")
-            session.add(APIKeyORM(id=key_id, developer_id=developer_id, project_id=project_id, environment=environment, secret_hash=digest, permissions=sorted(permissions), status="active")); await session.commit()
-        return APIKeyCreation(key_id, secret, project_id, environment)
+            session.add(APIKeyORM(id=key_id, developer_id=developer_id, project_id=project_id, environment=environment, name=name, prefix=prefix, key_type=key_type, secret_hash=digest, permissions=sorted(permissions), metadata_json=metadata or {}, expires_at=expires_at, status="active")); await session.commit()
+        return APIKeyCreation(key_id, secret, project_id, environment, prefix, key_type)
 
     async def authenticate(self, secret: str) -> APIKeyRecord:
         digest = hash_api_key(secret, self.pepper)
@@ -123,7 +125,7 @@ class DeveloperService:
             row = (await session.execute(select(APIKeyORM).where(APIKeyORM.secret_hash == digest, APIKeyORM.status == "active", (APIKeyORM.expires_at.is_(None) | (APIKeyORM.expires_at > now))))).scalar_one_or_none()
             if row is None: raise AuthenticationError("Invalid or inactive API key")
             row.last_used_at = datetime.now(timezone.utc); await session.commit()
-            return APIKeyRecord(key_id=row.id, developer_id=row.developer_id, project_id=row.project_id, environment=row.environment, secret_hash=row.secret_hash, permissions=set(row.permissions), status=row.status, created_at=row.created_at, last_used_at=row.last_used_at)
+            return APIKeyRecord(key_id=row.id, developer_id=row.developer_id, project_id=row.project_id, environment=row.environment, secret_hash=row.secret_hash, permissions=set(row.permissions), status=row.status, created_at=row.created_at, last_used_at=row.last_used_at, expires_at=row.expires_at, name=row.name, prefix=row.prefix, key_type=row.key_type, metadata=dict(row.metadata_json or {}))
         raise AuthenticationError("Invalid or inactive API key")
 
     async def revoke_api_key(self, key_id: str) -> None:
@@ -144,7 +146,7 @@ class DeveloperService:
         async with self.database.session() as session:
             row = await session.get(APIKeyORM, key_id)
             if row is None: raise NotFoundError("API key not found")
-            return APIKeyRecord(key_id=row.id, developer_id=row.developer_id, project_id=row.project_id, environment=row.environment, secret_hash="[redacted]", permissions=set(row.permissions), status=row.status, created_at=row.created_at, last_used_at=row.last_used_at)
+            return APIKeyRecord(key_id=row.id, developer_id=row.developer_id, project_id=row.project_id, environment=row.environment, secret_hash="[redacted]", permissions=set(row.permissions), status=row.status, created_at=row.created_at, last_used_at=row.last_used_at, expires_at=row.expires_at, name=row.name, prefix=row.prefix, key_type=row.key_type, metadata=dict(row.metadata_json or {}))
 
     async def list_api_keys(self, project_id: str) -> list[APIKeyRecord]:
         if not self.database:
@@ -161,16 +163,17 @@ class DeveloperService:
             old = self.api_keys.get(key_id)
             if old is None: raise NotFoundError("API key not found")
             old.status = "rotated"
-            secret, digest = generate_api_key(self.pepper); new_id = "key_" + secrets.token_urlsafe(12)
-            self.api_keys[new_id] = APIKeyRecord(new_id, old.developer_id, old.project_id, old.environment, digest, old.permissions)
-            return APIKeyCreation(new_id, secret, old.project_id, old.environment)
+            secret, digest = generate_api_key(self.pepper, old.key_type); new_id = "key_" + secrets.token_urlsafe(12); prefix = "_".join(secret.split("_")[:2]) + "_"
+            self.api_keys[new_id] = APIKeyRecord(new_id, old.developer_id, old.project_id, old.environment, digest, old.permissions, name=old.name, prefix=prefix, key_type=old.key_type, metadata=old.metadata, expires_at=old.expires_at)
+            return APIKeyCreation(new_id, secret, old.project_id, old.environment, prefix, old.key_type)
         async with self.database.session() as session:
             old = await session.get(APIKeyORM, key_id)
             if old is None: raise NotFoundError("API key not found")
             old.status = "rotated"
-            secret, digest = generate_api_key(self.pepper); new_id = "key_" + secrets.token_urlsafe(12)
-            session.add(APIKeyORM(id=new_id, developer_id=old.developer_id, project_id=old.project_id, environment=old.environment, secret_hash=digest, permissions=old.permissions, status="active")); await session.commit()
-            return APIKeyCreation(new_id, secret, old.project_id, old.environment)
+            secret, digest = generate_api_key(self.pepper, old.key_type); new_id = "key_" + secrets.token_urlsafe(12)
+            prefix = "_".join(secret.split("_")[:2]) + "_"
+            session.add(APIKeyORM(id=new_id, developer_id=old.developer_id, project_id=old.project_id, environment=old.environment, name=old.name or "rotated", prefix=prefix, key_type=old.key_type, secret_hash=digest, permissions=old.permissions, metadata_json=old.metadata, expires_at=old.expires_at, status="active")); await session.commit()
+            return APIKeyCreation(new_id, secret, old.project_id, old.environment, prefix, old.key_type)
         raise NotFoundError("API key not found")
 
     async def disable_api_key(self, key_id: str) -> None:

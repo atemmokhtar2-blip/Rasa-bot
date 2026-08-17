@@ -10,8 +10,8 @@ class Permission:
 
 class PermissionService:
     ROLE_PERMISSIONS = {
-        "viewer": {"projects.read", "datasets.read", "training.read", "models.read", "bots.read", "usage.read", "audit.read", "keys.read"},
-        "developer": {"projects.read", "projects.write", "datasets.read", "datasets.write", "training.read", "training.write", "models.read", "models.evaluate", "models.deploy", "bots.read", "bots.manage", "usage.read", "audit.read", "keys.read", "keys.write", "messages.write"},
+        "viewer": {"projects.read", "datasets.read", "training.read", "models.read", "models.runtime", "bots.read", "webhooks.read", "usage.read", "audit.read", "keys.read"},
+        "developer": {"projects.read", "projects.write", "datasets.read", "datasets.write", "datasets.train", "training.read", "training.write", "training.cancel", "models.read", "models.write", "models.evaluate", "models.deploy", "models.rollback", "models.runtime", "bots.read", "bots.manage", "webhooks.read", "webhooks.write", "usage.read", "audit.read", "keys.read", "keys.write", "messages.write"},
         "admin": {"*"},
     }
     def __init__(self): self._grants: dict[str, set[str]] = {}

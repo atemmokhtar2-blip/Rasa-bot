@@ -28,12 +28,15 @@ class WebhookSubscription:
 
 class WebhookRegistry:
     def __init__(self): self._subscriptions: list[WebhookSubscription] = []
-    def register(self, subscription: WebhookSubscription) -> None: self._subscriptions.append(subscription)
-    def for_event(self, event_name: str) -> list[WebhookSubscription]: return [s for s in self._subscriptions if s.event_name in {event_name, "*"}]
+    def register(self, subscription: WebhookSubscription) -> WebhookSubscription: self._subscriptions.append(subscription); return subscription
+    def for_event(self, event_name: str, project_id: str | None = None) -> list[WebhookSubscription]: return [s for s in self._subscriptions if s.event_name in {event_name, "*"} and (project_id is None or s.metadata.get("project_id") == project_id)]
+    def list_project(self, project_id: str) -> list[WebhookSubscription]: return [s for s in self._subscriptions if s.metadata.get("project_id") == project_id]
+    def remove(self, webhook_id: str, project_id: str) -> bool:
+        before = len(self._subscriptions); self._subscriptions = [s for s in self._subscriptions if not (s.metadata.get("webhook_id") == webhook_id and s.metadata.get("project_id") == project_id)]; return len(self._subscriptions) != before
     @staticmethod
     def signature(secret: str, body: bytes) -> str: return hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 
 class QueuedWebhookDispatcher:
     def __init__(self, queue: RedisQueue): self.queue = queue
     async def enqueue(self, subscription: WebhookSubscription, payload: dict[str, Any]) -> str:
-        return await self.queue.publish("webhooks", {"url": subscription.url, "event": subscription.event_name, "payload": payload, "secret": subscription.secret, "retries": 0})
+        return await self.queue.publish("webhooks", {"webhook_id": subscription.metadata.get("webhook_id", ""), "project_id": subscription.metadata.get("project_id", payload.get("project_id", "")), "url": subscription.url, "event": subscription.event_name, "event_id": payload.get("event_id", ""), "payload": payload, "secret": subscription.secret, "retries": 0})

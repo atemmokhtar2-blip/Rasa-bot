@@ -15,6 +15,10 @@ class ConfidencePolicy:
         if confidence >= self.high_threshold: return ConfidenceDecision("accept", "high_confidence")
         if confidence >= self.low_threshold: return ConfidenceDecision("clarify", "medium_confidence")
         return ConfidenceDecision("fallback", "low_confidence")
+    def apply_optimized_thresholds(self, optimized: dict[str, Any]) -> None:
+        accept = float(optimized["accept_threshold"]); clarify = float(optimized["clarification_threshold"]); fallback = float(optimized["fallback_threshold"])
+        if not 0 <= fallback <= clarify <= accept <= 1: raise ValueError("optimized thresholds must satisfy 0 <= fallback <= clarify <= accept <= 1")
+        self.high_threshold, self.low_threshold = accept, clarify
 
 class IntentResolver:
     def resolve(self, result: NLUResult) -> IntentPrediction: return result.intent

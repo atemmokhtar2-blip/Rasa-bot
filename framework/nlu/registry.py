@@ -9,14 +9,23 @@ class IntentDefinition:
     id: str
     name: str
     description: str = ""
+    category: str | None = None
+    parent: str | None = None
     project_id: str | None = None
     version: str = "1.0.0"
     status: str = "active"
+    required_entities: tuple[str, ...] = ()
+    allowed_actions: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class EntityDefinition:
     name: str
+    category: str | None = None
+    parent: str | None = None
+    project_id: str | None = None
+    version: str = "1.0.0"
+    status: str = "active"
     normalizer: Callable[[Any], Any] | None = None
     validator: Callable[[Any], bool] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)

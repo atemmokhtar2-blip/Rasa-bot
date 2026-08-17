@@ -10,6 +10,7 @@ class TelegramBot:
     id: str = field(default_factory=lambda: "bot_" + uuid4().hex)
     status: str = "disabled"
     webhook_url: str | None = None
+    webhook_secret_ref: str | None = None
     metadata: dict = field(default_factory=dict)
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 

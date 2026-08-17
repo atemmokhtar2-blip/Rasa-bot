@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     secret_manager_token: str | None = None
     otel_exporter_endpoint: str | None = None
     audit_retention_days: int = 365
+    training_artifact_root: str = "./data/artifacts"
+    webhook_timeout: float = 10.0
     model_config = SettingsConfigDict(env_file=(".env", ".env.development"), extra="ignore")
 
     @model_validator(mode="after")
@@ -39,7 +41,7 @@ class Settings(BaseSettings):
         if self.app_env == "production" and not self.database_url.startswith(("postgres://", "postgresql://", "postgresql+asyncpg://")):
             raise ValueError("Production requires PostgreSQL DATABASE_URL")
         if not 0 <= self.intent_low_threshold <= self.intent_high_threshold <= 1: raise ValueError("Invalid intent confidence thresholds")
-        if self.nlu_timeout <= 0 or self.action_timeout <= 0 or self.plugin_timeout <= 0 or self.session_timeout_minutes <= 0 or self.rate_limit <= 0: raise ValueError("Timeouts, session timeout, and rate limit must be positive")
+        if self.nlu_timeout <= 0 or self.action_timeout <= 0 or self.plugin_timeout <= 0 or self.webhook_timeout <= 0 or self.session_timeout_minutes <= 0 or self.rate_limit <= 0: raise ValueError("Timeouts, session timeout, and rate limit must be positive")
         return self
 
 @lru_cache

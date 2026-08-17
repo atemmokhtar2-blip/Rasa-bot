@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any
 from uuid import uuid4
 from sqlalchemy import select
@@ -31,6 +31,18 @@ class UsageMeter:
         async with self.database.session() as session:
             rows = (await session.execute(select(UsageEventORM).where(UsageEventORM.project_id == project_id).order_by(UsageEventORM.created_at.desc()).limit(limit))).scalars().all()
             return [UsageEvent(project_id=row.project_id, metric=row.metric, quantity=row.quantity, request_id=row.request_id, metadata=dict(row.metadata_json or {}), id=row.id, created_at=row.created_at) for row in rows]
+
+    async def window_totals(self, project_id: str, *, since: datetime) -> dict[str, int]:
+        if not self.database:
+            totals: dict[str, int] = {}
+            for event in self.events:
+                if event.project_id == project_id and event.created_at >= since: totals[event.metric] = totals.get(event.metric, 0) + event.quantity
+            return totals
+        totals: dict[str, int] = {}
+        async with self.database.session() as session:
+            rows = (await session.execute(select(UsageEventORM).where(UsageEventORM.project_id == project_id, UsageEventORM.created_at >= since))).scalars().all()
+            for event in rows: totals[event.metric] = totals.get(event.metric, 0) + event.quantity
+        return totals
 
     async def totals(self, project_id: str) -> dict[str, int]:
         if not self.database:

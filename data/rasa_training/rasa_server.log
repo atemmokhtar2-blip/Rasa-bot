@@ -1,0 +1,28 @@
+/home/ubuntu/Rasa-bot/.venv-rasa/lib/python3.10/site-packages/rasa/core/tracker_store.py:1044: MovedIn20Warning: Deprecated API features detected! These feature(s) are not compatible with SQLAlchemy 2.0. To prevent incompatible upgrades prior to updating applications, ensure requirements files are pinned to "sqlalchemy<2.0". Set environment variable SQLALCHEMY_WARN_20=1 to show all deprecation warnings.  Set environment variable SQLALCHEMY_SILENCE_UBER_WARNING=1 to silence this message. (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  Base: DeclarativeMeta = declarative_base()
+/home/ubuntu/Rasa-bot/.venv-rasa/lib/python3.10/site-packages/rasa/shared/utils/validation.py:134: DeprecationWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html
+  import pkg_resources
+/home/ubuntu/Rasa-bot/.venv-rasa/lib/python3.10/site-packages/pkg_resources/__init__.py:2832: DeprecationWarning: Deprecated call to `pkg_resources.declare_namespace('mpl_toolkits')`.
+Implementing implicit namespace packages (as specified in PEP 420) is preferred to `pkg_resources.declare_namespace`. See https://setuptools.pypa.io/en/latest/references/keywords.html#keyword-namespace-packages
+  declare_namespace(pkg)
+/home/ubuntu/Rasa-bot/.venv-rasa/lib/python3.10/site-packages/pkg_resources/__init__.py:2832: DeprecationWarning: Deprecated call to `pkg_resources.declare_namespace('ruamel')`.
+Implementing implicit namespace packages (as specified in PEP 420) is preferred to `pkg_resources.declare_namespace`. See https://setuptools.pypa.io/en/latest/references/keywords.html#keyword-namespace-packages
+  declare_namespace(pkg)
+/home/ubuntu/Rasa-bot/.venv-rasa/lib/python3.10/site-packages/sanic_cors/extension.py:39: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+  SANIC_VERSION = LooseVersion(sanic_version)
+/home/ubuntu/Rasa-bot/.venv-rasa/lib/python3.10/site-packages/tensorflow/lite/python/util.py:52: DeprecationWarning: jax.xla_computation is deprecated. Please use the AOT APIs.
+  from jax import xla_computation as _xla_computation
+/home/ubuntu/Rasa-bot/.venv-rasa/lib/python3.10/site-packages/matplotlib/fontconfig_pattern.py:66: PyparsingDeprecationWarning: 'setParseAction' deprecated - use 'set_parse_action'
+  ).setParseAction(self._family)
+/home/ubuntu/Rasa-bot/.venv-rasa/lib/python3.10/site-packages/matplotlib/fontconfig_pattern.py:127: PyparsingDeprecationWarning: 'parseString' deprecated - use 'parse_string'
+  self._parser.parseString(pattern)
+/home/ubuntu/Rasa-bot/.venv-rasa/lib/python3.10/site-packages/matplotlib/fontconfig_pattern.py:134: PyparsingDeprecationWarning: 'resetCache' deprecated - use 'reset_cache'
+  self._parser.resetCache()
+2026-08-17 19:08:50 INFO     root  - Starting Rasa server on http://0.0.0.0:5005
+2026-08-17 19:08:50 INFO     rasa.core.processor  - Loading model data/rasa_training/models/rasa_phase3_v1.tar.gz...
+[93m/home/ubuntu/Rasa-bot/.venv-rasa/lib/python3.10/site-packages/rasa/utils/train_utils.py:530: UserWarning: constrain_similarities is set to `False`. It is recommended to set it to `True` when using cross-entropy loss.
+  rasa.shared.utils.io.raise_warning(
+[0m2026-08-17 19:09:28 INFO     root  - Rasa server is up and running.
+[93m/home/ubuntu/Rasa-bot/.venv-rasa/lib/python3.10/site-packages/rasa/shared/utils/io.py:99: UserWarning: Failed to parse arguments in line '/start'. Expected the intent to be one of [['back', 'book', 'cancel_order', 'get_order_status', 'goodbye', 'greet', 'nlu_fallback', 'out_of_scope', 'restart', 'session_start']] but found start.Continuing with given line as user text.
+  More info at https://rasa.com/docs/rasa/stories
+[0m

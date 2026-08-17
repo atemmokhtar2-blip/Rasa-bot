@@ -36,7 +36,7 @@ class TelegramAdapter(ChannelAdapter):
                 response.raise_for_status()
                 body = response.json()
                 if not body.get("ok"): return {"status": "unavailable", "channel": self.channel}
-                return {"status": "ready", "channel": self.channel, "bot_id": body.get("result", {}).get("id")}
+                return {"status": "ready", "channel": self.channel, "bot_id": body.get("result", {}).get("id"), "username": body.get("result", {}).get("username")}
         except Exception as exc:
             return {"status": "unavailable", "channel": self.channel, "error": str(exc)}
 
@@ -63,12 +63,12 @@ class TelegramAdapter(ChannelAdapter):
                 raise TransportError("Telegram API request failed") from exc
         return {"recipient_id": recipient_id, "results": results}
 
-    async def set_webhook(self, url: str) -> dict[str, Any]:
+    async def set_webhook(self, url: str, secret_token: str | None = None) -> dict[str, Any]:
         if not self.token:
             raise TransportError("Telegram token is not configured")
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(f"https://api.telegram.org/bot{self.token}/setWebhook", json={"url": url})
+                response = await client.post(f"https://api.telegram.org/bot{self.token}/setWebhook", json={"url": url, **({"secret_token": secret_token} if secret_token else {})})
                 response.raise_for_status()
                 body = response.json()
                 if not body.get("ok"):

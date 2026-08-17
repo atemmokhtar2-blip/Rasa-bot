@@ -1,0 +1,26 @@
+version: "3.1"
+intents:
+  - greet
+  - get_order_status
+  - cancel_order
+  - book
+  - goodbye
+entities:
+  - order_id
+slots:
+  order_id:
+    type: text
+    mappings:
+      - type: from_entity
+        entity: order_id
+responses:
+  utter_greet:
+    - text: "أهلًا بك، كيف يمكنني مساعدتك؟"
+  utter_goodbye:
+    - text: "إلى اللقاء."
+  utter_ask_order_id:
+    - text: "من فضلك أرسل رقم الطلب."
+actions: []
+session_config:
+  session_expiration_time: 60
+  carry_over_slots_to_new_session: true

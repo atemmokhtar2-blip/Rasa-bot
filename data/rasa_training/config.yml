@@ -1,0 +1,23 @@
+recipe: default.v1
+language: ar
+pipeline:
+  - name: WhitespaceTokenizer
+  - name: CountVectorsFeaturizer
+  - name: CountVectorsFeaturizer
+    analyzer: char_wb
+    min_ngram: 3
+    max_ngram: 17
+  - name: DIETClassifier
+    epochs: 30
+    random_seed: 42
+  - name: EntitySynonymMapper
+  - name: FallbackClassifier
+    threshold: 0.35
+    ambiguity_threshold: 0.10
+policies:
+  - name: MemoizationPolicy
+  - name: RulePolicy
+  - name: TEDPolicy
+    epochs: 20
+    random_seed: 42
+assistant_id: rasa_phase3

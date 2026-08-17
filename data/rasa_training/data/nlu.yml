@@ -1,0 +1,34 @@
+version: "3.1"
+nlu:
+  - intent: greet
+    examples: |
+      - مرحبا
+      - أهلا
+      - السلام عليكم
+      - hello
+      - hi
+  - intent: goodbye
+    examples: |
+      - مع السلامة
+      - إلى اللقاء
+      - goodbye
+      - bye
+  - intent: get_order_status
+    examples: |
+      - عايز أعرف حالة الطلب [123](order_id)
+      - ما هي حالة طلبي [456](order_id)
+      - أين وصل الطلب رقم [789](order_id)
+      - order status [1001](order_id)
+      - check order [1002](order_id)
+  - intent: cancel_order
+    examples: |
+      - أريد إلغاء الطلب
+      - الغي الطلب من فضلك
+      - cancel my order
+      - I want to cancel the order
+  - intent: book
+    examples: |
+      - أريد حجز موعد
+      - احجز لي موعدا
+      - book an appointment
+      - I want to book
