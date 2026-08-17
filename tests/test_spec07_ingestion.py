@@ -65,3 +65,13 @@ def test_reproducibility_manifest_and_error_analysis_are_deterministic():
     report = ErrorAnalyzer().analyze([{"text": "x", "prediction": IntentPrediction("wrong", .4), "expected_intent": "right"}])
     plan = RetrainingPlanner().plan(model_version="m:v1", dataset_version="d:v1", report=report)
     assert report.confusion_pairs == {"right->wrong": 1} and plan and "add_corrected_examples" in plan.required_actions
+
+
+def test_model_registry_rolls_back_the_exact_previous_model_target():
+    from framework.models.registry import ModelRegistry, ModelVersion
+    registry = ModelRegistry()
+    registry.register(ModelVersion("m1", "v1", "rasa", "d1", status="ready", artifact_uri="a1", project_id="p1"))
+    registry.register(ModelVersion("m2", "v1", "rasa", "d2", status="ready", artifact_uri="a2", project_id="p1"))
+    registry.deploy("p1", "m1", "v1", "production")
+    registry.deploy("p1", "m2", "v1", "production")
+    assert registry.rollback("p1").model_id == "m1"
