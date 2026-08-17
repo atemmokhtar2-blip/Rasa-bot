@@ -70,7 +70,7 @@ class ApplicationContainer:
         self.usage = UsageMeter(self.database)
         self.metrics = MetricsRegistry()
         self.audit = AuditLogger(self.database)
-        self.engine = FrameworkEngine(self.nlu, self.events, self.actions, intent_threshold=self.settings.intent_low_threshold, usage=self.usage, audit=self.audit, entities=self.entities, sessions=self.sessions, metrics=self.metrics, idempotency=self.idempotency)
+        self.engine = FrameworkEngine(self.nlu, self.events, self.actions, intent_threshold=self.settings.intent_low_threshold, usage=self.usage, audit=self.audit, entities=self.entities, sessions=self.sessions, metrics=self.metrics, idempotency=self.idempotency, project_resolver=self.developers.get_project, allow_project_fallback=self.settings.app_env not in {"production", "staging"})
         self.messages = MessageApplicationService(self.engine)
         self.bots = PersistentBotRegistry(self.bot_repository) if self.bot_repository else BotRegistry()
         self.commands = CommandRegistry()

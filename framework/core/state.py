@@ -83,11 +83,18 @@ class PolicyDecision:
     kind: str
     target: str | None = None
     reason: str | None = None
+    def __await__(self):
+        async def _value(): return self
+        return _value().__await__()
 
 class PolicyEngine:
     def __init__(self, confidence_threshold: float = 0.55): self.confidence_threshold = confidence_threshold
-    def decide(self, intent: IntentPrediction, session: Session, available_actions: set[str]) -> PolicyDecision:
+    def decide(self, context_or_intent, session: Session | None = None, available_actions: set[str] | None = None) -> PolicyDecision:
+        if session is None and hasattr(context_or_intent, "nlu_result"):
+            context = context_or_intent; intent = context.nlu_result.intent if hasattr(context.nlu_result, "intent") else context.nlu_result; session = context.session; available_actions = set(getattr(context, "available_actions", []))
+        else:
+            intent = context_or_intent; available_actions = available_actions or set()
         if intent.confidence < self.confidence_threshold: return PolicyDecision("fallback", reason="low_confidence")
         if intent.name in available_actions: return PolicyDecision("action", target=intent.name)
         return PolicyDecision("clarification", reason="no_action_registered")
-    async def decide_async(self, intent: IntentPrediction, session: Session, available_actions: set[str]) -> PolicyDecision: return self.decide(intent, session, available_actions)
+    async def decide_async(self, context_or_intent, session: Session | None = None, available_actions: set[str] | None = None) -> PolicyDecision: return self.decide(context_or_intent, session, available_actions)

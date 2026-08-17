@@ -2,13 +2,13 @@
 
 ## Current baseline
 
-المشروع يحتوي على Foundation فعلية تشمل FastAPI وPostgreSQL/Redis adapters وAPI auth وTelegram adapter وRasa HTTP provider وregistries وevent bus وsession state وFrameworkEngine أولي. لكن Engine الحالي يعتمد على `detect_intent`/`extract_entities` بدل `NLUResult.analyze`، ولا يملك `ProcessingContext` و`RequestContext` و`PolicyResult` و`ResponseBuilder` كعقود موحدة، كما أن event metadata والـ timing والـ error isolation ليست مكتملة.
+المشروع يحتوي على Foundation فعلية تشمل FastAPI وPostgreSQL/Redis adapters وAPI auth وTelegram adapter وRasa HTTP provider وregistries وevent bus وsession state. تمت ترقية Engine إلى pipeline موحدة تعتمد `NLUResult.analyze` و`ProcessingContext` و`RequestContext` و`PolicyResult` و`ResponseBuilder`، مع project resolution injectable، event metadata، timings، error isolation، وRedis idempotency.
 
 ## Priority gaps mapped to specification
 
 | Spec sections | Gap | Planned real implementation |
 |---|---|---|
-| 4-8, 42-44 | Core context/result/pipeline contracts ناقصة | Implemented: ProcessingContext وRequestContext وNLUResult وPolicyResult وActionContext/ActionResult وProcessingResult serialization وstage timings وApplication Service. |
+| 4-8, 42-44 | Core context/result/pipeline contracts ناقصة | Verified implemented: ProcessingContext وRequestContext وNLUResult وPolicyResult وActionContext/ActionResult وProcessingResult serialization وstage timings وApplication Service وinjectable project resolution. |
 | 8-11, 14-16 | NLU abstraction تستخدم API قديمًا وRasa error normalization ناقص | Implemented: `NLUProvider.analyze` compatibility contract، Rasa normalized NLUResult، retry/timeout، NLUProviderError، ConfidencePolicy وEntityNormalizer. |
 | 17-24 | Session/context/dialogue/conversation/user/channel identity غير ممثلة بالكامل | Implemented: Session lifecycle كامل، ContextManager، ConversationManager، UserResolver، ChannelIdentity، وPersistentSession compatibility. |
 | 26-36 | Policy/action/tool/response contracts مبسطة | Implemented: PolicyResult decisions، ActionContext/ActionResult، Action/Tool registry validation، tool authorization/timeout، وResponseBuilder channel-agnostic. |

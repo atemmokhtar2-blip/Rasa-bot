@@ -2,7 +2,7 @@ import asyncio
 import pytest
 from framework.core.events import EventBus, FrameworkEvent
 from framework.core.state import ContextManager, DialogueManager, SessionManager
-from framework.core.models import Entity, IntentPrediction
+from framework.core.models import Entity, IntentPrediction, IncomingMessage, ProcessingContext, RequestContext
 from framework.core.integrations import ToolExecutionService
 from framework.errors import AuthorizationError, ToolError
 from framework.nlu.policy import ConfidencePolicy, EntityNormalizer
@@ -30,6 +30,14 @@ async def test_event_handler_failure_is_isolated():
     await bus.emit(event)
     assert called == ['MESSAGE_PROCESSED']
     assert event.payload['handler_errors']
+
+@pytest.mark.asyncio
+async def test_policy_engine_accepts_processing_context_contract():
+    from framework.core.state import PolicyEngine, Session
+    session = Session('p', 'u', 'c')
+    context = ProcessingContext(IncomingMessage(project_id='p', channel='test', user_id='u', chat_id='c', text='x'), RequestContext(project_id='p', user_id='u'), session=session, nlu_result=IntentPrediction('book_appointment', 0.99), available_actions={'book_appointment'})
+    decision = await PolicyEngine().decide(context)
+    assert decision.kind == 'action' and decision.target == 'book_appointment'
 
 def test_confidence_and_entity_normalization():
     policy = ConfidencePolicy(0.8, 0.55)

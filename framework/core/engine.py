@@ -8,12 +8,12 @@ from framework.core.registries import ActionRegistry
 from framework.core.response import ResponseBuilder
 from framework.core.state import ContextEngine, ConversationManager, DialogueManager, PolicyEngine, SessionManager, UserResolver
 from framework.nlu.registry import EntityRegistry
-from framework.errors import ActionError, AuthorizationError
+from framework.errors import ActionError, AuthorizationError, NotFoundError
 from framework.observability import AuditEvent, AuditLogger, UsageEvent, UsageMeter
 from framework.observability.metrics import MetricsRegistry
 
 class FrameworkEngine:
-    def __init__(self, nlu: NLUProvider, events: EventBus, actions: ActionRegistry, intent_threshold: float = 0.55, sessions: SessionManager | None = None, context_engine: ContextEngine | None = None, dialogue: DialogueManager | None = None, policy: PolicyEngine | None = None, usage: UsageMeter | None = None, audit: AuditLogger | None = None, entities: EntityRegistry | None = None, response_builder: ResponseBuilder | None = None, idempotency: IdempotencyStore | None = None, metrics: MetricsRegistry | None = None, conversations: ConversationManager | None = None, users: UserResolver | None = None):
+    def __init__(self, nlu: NLUProvider, events: EventBus, actions: ActionRegistry, intent_threshold: float = 0.55, sessions: SessionManager | None = None, context_engine: ContextEngine | None = None, dialogue: DialogueManager | None = None, policy: PolicyEngine | None = None, usage: UsageMeter | None = None, audit: AuditLogger | None = None, entities: EntityRegistry | None = None, response_builder: ResponseBuilder | None = None, idempotency: IdempotencyStore | None = None, metrics: MetricsRegistry | None = None, conversations: ConversationManager | None = None, users: UserResolver | None = None, project_resolver=None, allow_project_fallback: bool = True):
         self.nlu, self.events, self.actions = nlu, events, actions
         self.intent_threshold = intent_threshold
         self.sessions = sessions or SessionManager()
@@ -28,6 +28,8 @@ class FrameworkEngine:
         self.metrics = metrics or MetricsRegistry()
         self.conversations = conversations or ConversationManager()
         self.users = users or UserResolver()
+        self.project_resolver = project_resolver
+        self.allow_project_fallback = allow_project_fallback
 
     async def _event(self, name: str, ctx: ProcessingContext, payload: dict, critical: bool = False) -> None:
         await self.events.emit(FrameworkEvent(name, payload, request_id=ctx.request.request_id, trace_id=ctx.request.trace_id, project_id=ctx.message.project_id, user_id=ctx.message.user_id, session_id=getattr(ctx.session, "id", None), critical=critical))
@@ -38,7 +40,13 @@ class FrameworkEngine:
         identity = __import__('framework.core.models', fromlist=['ChannelIdentity']).ChannelIdentity(message.channel, message.user_id, message.chat_id, dict(message.metadata))
         user = await self.users.resolve(message.project_id, identity)
         conversation = await self.conversations.get_or_create(message.project_id, user.user_id, message.conversation_id or message.chat_id)
-        ctx = ProcessingContext(message=message, request=request, user=user, conversation=conversation)
+        if self.project_resolver:
+            try: project = await self.project_resolver(message.project_id)
+            except NotFoundError:
+                if not self.allow_project_fallback: raise
+                project = {"id": message.project_id}
+        else: project = {"id": message.project_id}
+        ctx = ProcessingContext(message=message, request=request, project=project, user=user, conversation=conversation)
         previous = await self.idempotency.get(message.idempotency_key)
         if previous is not None: return previous
         self.metrics.inc("messages_received_total")
@@ -46,13 +54,13 @@ class FrameworkEngine:
         await self.usage.record(UsageEvent(message.project_id, "messages", request_id=request.request_id))
         await self._event("MESSAGE_RECEIVED", ctx, {"message_id": message.message_id})
         await self._event("PROJECT_RESOLVED", ctx, {"project_id": message.project_id})
-        await self._event("SESSION_CREATED", ctx, {"conversation_id": ctx.conversation.conversation_id})
         session_start = time.perf_counter()
         ctx.session = await self.sessions.get_or_create(message.project_id, message.user_id, ctx.conversation.conversation_id)
         ctx.timings["session_ms"] = (time.perf_counter() - session_start) * 1000
         trace += ["RESOLVE_SESSION", "LOAD_CONTEXT"]
         ctx.metadata = dict(ctx.session.context)
         ctx.metadata.update(message.metadata.get("context", {}))
+        await self._event("SESSION_CREATED", ctx, {"session_id": ctx.session.id, "conversation_id": ctx.conversation.conversation_id})
         await self._event("SESSION_LOADED", ctx, {"session_id": ctx.session.id})
         nlu_start = time.perf_counter()
         try:
@@ -68,6 +76,7 @@ class FrameworkEngine:
         await self._event("NLU_COMPLETED", ctx, {"provider": ctx.nlu_result.provider, "intent": ctx.nlu_result.intent.name})
         await self._event("INTENT_DETECTED", ctx, {"intent": ctx.nlu_result.intent.name, "confidence": ctx.nlu_result.confidence})
         await self._event("ENTITIES_EXTRACTED", ctx, {"count": len(ctx.nlu_result.entities)})
+        ctx.available_actions = set(self.actions.names())
         ctx.dialogue_state = self.context_engine.build(ctx.session, ctx.nlu_result.intent, ctx.nlu_result.entities)
         self.dialogue.next_state(ctx.session, ctx.nlu_result.intent, ctx.nlu_result.entities)
         trace.append("UPDATE_DIALOGUE_STATE")

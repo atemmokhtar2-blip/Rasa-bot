@@ -91,6 +91,8 @@ class NLUResult:
     processing_time_ms: float = 0.0
     @property
     def confidence(self) -> float: return self.intent.confidence
+    @property
+    def processing_time(self) -> float: return self.processing_time_ms
 
 @dataclass(slots=True)
 class RequestContext:
@@ -115,6 +117,7 @@ class ProcessingContext:
     dialogue_state: Any = None
     nlu_result: NLUResult | None = None
     policy_result: Any = None
+    available_actions: set[str] = field(default_factory=set)
     action_result: Any = None
     metadata: dict[str, Any] = field(default_factory=dict)
     timings: dict[str, float] = field(default_factory=dict)

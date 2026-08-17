@@ -2,7 +2,7 @@
 
 ## What was implemented
 
-تم تحويل Foundation إلى Core Engine قابل للتشغيل مستقلًا عن Telegram وRasa وPostgreSQL وRedis عبر interfaces قابلة للاستبدال. أصبح المسار الداخلي يستخدم `RequestContext` و`ProcessingContext` و`NLUResult` و`PolicyResult` و`ActionContext` و`ProcessingResult`، مع `ResponseBuilder` channel-agnostic وقياسات زمنية لكل مرحلة.
+تم تحويل Foundation إلى Core Engine قابل للتشغيل مستقلًا عن Telegram وRasa وPostgreSQL وRedis عبر interfaces قابلة للاستبدال. أضيف project resolver injectable؛ وفي production/staging يفشل المشروع غير الموجود بدل إنشاء fallback، بينما يبقى fallback مقيدًا ببيئات التطوير للاختبارات المحلية. أصبح المسار الداخلي يستخدم `RequestContext` و`ProcessingContext` و`NLUResult` و`PolicyResult` و`ActionContext` و`ProcessingResult`، مع `ResponseBuilder` channel-agnostic وقياسات زمنية لكل مرحلة.
 
 تم توحيد NLU عبر `NLUProvider.analyze`. يوفر `RasaProvider` اتصالًا مستقلًا بمهلة ومحاولات وإخطاء `NLUProviderError` وhealth probe، بينما يوفر `FakeNLUProvider` مسار الاختبارات. أضيفت `ConfidencePolicy` و`IntentResolver` و`EntityNormalizer` وواجهات registries كاملة للـ intents/entities/actions/tools.
 
@@ -53,7 +53,7 @@ ProcessingResult + idempotency + events + audit + metrics
 
 ## Tests
 
-الاختبارات الحالية تشمل Core E2E باستخدام `FakeNLUProvider` و`EchoAction`، وحدات session/context/event/tool/registry، Rasa contract normalization، Telegram normalization، API authentication، integration PostgreSQL/Redis عند توفرهما، وcompile/diff checks.
+أضيف اختبار Definition of Done الفعلي من Developer إلى Project إلى API Key إلى IncomingMessage إلى Core Engine، واختبار مباشر لـ `PolicyEngine.decide(ProcessingContext)`، إضافة إلى اختبار events وidempotency ومسار القبول. الاختبارات الحالية تشمل Core E2E باستخدام `FakeNLUProvider` و`EchoAction`، وحدات session/context/event/tool/registry، Rasa contract normalization، Telegram normalization، API authentication، integration PostgreSQL/Redis عند توفرهما، وcompile/diff checks.
 
 ## Known limitations
 
