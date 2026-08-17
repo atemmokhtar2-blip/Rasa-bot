@@ -46,6 +46,12 @@
 
 إذا لم يتغير fingerprint منذ آخر Training، يعيد orchestrator `dataset_unchanged` ولا ينشئ Job مكررًا. Scheduled training ليس مفروضًا افتراضيًا.
 
+## Training Data Firewall وData Safety
+
+يوفر `TrainingDataFirewall` طبقة إلزامية قبل وصول Candidate إلى Dataset أو Training. يكتشف API keys وBot tokens وpasswords وBearer credentials، ويرفض الأسرار بدل تخزينها. كما يوفر `PIIDetector` و`PIIRedactor` استعدادًا لمعالجة البريد الإلكتروني وأرقام الهاتف، مع حفظ metadata يوضح أن النص تمت معالجته.
+
+لا يسمح firewall بالعبور إلا عندما تكون العينة `approved`، وReview status موثوقًا، ومرحلة sanitization مكتملة. وتوفر `RetentionPolicy` حدًا زمنيًا قابلًا للتهيئة لبيانات Runtime، مع خيار حذف البيانات الخام بعد promotion.
+
 ## Production Safety
 
 تستخدم `ProductionPromotionPolicy` ثلاث نتائج: `PROMOTE`, `HOLD`, و`REJECT`. لا يسمح Promotion إلى production عند فشل Quality Gate أو اكتشاف Regression. كما يتطلب human approval ما لم يُفعّل `auto_deploy` صراحةً.
@@ -79,4 +85,4 @@ Candidate → Filter → Sanitize → Review → Approved → Dataset Version
 
 ## التحقق
 
-تم تشغيل compile check وpytest بعد دمج طبقات Specification 08. النتيجة الحالية هي **98 passed, 2 skipped**، مع تحذيرات deprecation من FastAPI/Starlette فقط، ولا توجد أخطاء اختبار.
+تم تشغيل compile check وpytest بعد دمج طبقات Specification 08. النتيجة الحالية هي **99 passed, 2 skipped**، مع تحذيرات deprecation من FastAPI/Starlette فقط، ولا توجد أخطاء اختبار.
