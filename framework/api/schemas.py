@@ -23,6 +23,29 @@ class MessageCreate(BaseModel):
     channel: str = "api"
     text: str | None = Field(default=None, max_length=10000)
 
+class TrainingExampleInput(BaseModel):
+    text: str = Field(min_length=1, max_length=10000)
+    intent: str = Field(min_length=1, max_length=255)
+    entities: list[dict] = []
+    metadata: dict = {}
+
+class DatasetCreate(BaseModel):
+    project_id: str = Field(min_length=1)
+    version: str = Field(min_length=1, max_length=64)
+    schema_version: str = "1"
+    examples: list[TrainingExampleInput]
+
+class TrainingCreate(BaseModel):
+    project_id: str = Field(min_length=1)
+    dataset_version: str = Field(min_length=1)
+    config_path: str = Field(min_length=1)
+    output_dir: str = Field(min_length=1)
+
+class DeploymentCreate(BaseModel):
+    project_id: str = Field(min_length=1)
+    model_id: str = Field(min_length=1)
+    canary: bool = False
+
 class APIResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     success: bool

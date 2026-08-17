@@ -18,11 +18,11 @@ docker compose up --build
 
 ## Database
 
-عند بدء الحاوية، تستدعي ApplicationContainer `create_schema()` لإنشاء الجداول المعرّفة في SQLAlchemy. ملف `migrations/001_initial.sql` موجود للمراجعة والترحيل المنضبط، ويمكن تشغيله عبر أداة migrations في بيئة الإدارة.
+عند بدء الحاوية، تستدعي ApplicationContainer `create_schema()` لإنشاء الجداول المعرّفة في SQLAlchemy. يوجد Alembic فعليًا في `alembic.ini` و`migrations/env.py` و`migrations/versions/0001_initial.py`، ويمكن تشغيل `alembic upgrade head` على PostgreSQL لترحيل قاعدة جديدة. ملف `migrations/001_initial.sql` هو مصدر SQL المراجع للـ revision الأول.
 
 ## Real Integrations
 
-`RasaTrainer` يستدعي executable `rasa` الحقيقي. إذا لم يكن Rasa مثبتًا أو endpoint غير متاح، يفشل التشغيل برسالة واضحة ولا يرجع نتيجة تدريب مصطنعة. `RedisRateLimiter` و`RedisQueue` يستخدمان Redis الحقيقي عند ضبط `REDIS_URL`. `SQLDatabase` يستخدم PostgreSQL عبر `asyncpg` عند ضبط `DATABASE_URL`.
+`RasaTrainer` يستدعي executable `rasa` الحقيقي. إذا لم يكن Rasa مثبتًا أو endpoint غير متاح، يفشل التشغيل برسالة واضحة ولا يرجع نتيجة تدريب مصطنعة. `RedisRateLimiter` و`RedisQueue` يستخدمان Redis الحقيقي عند ضبط `REDIS_URL`. `SQLDatabase` يستخدم PostgreSQL عبر `asyncpg` عند ضبط `DATABASE_URL`. Telegram webhooks تُوضع في `telegram_updates` عندما يكون Redis مفعّلًا، و`TelegramWebhookWorker` هو المسؤول عن تشغيل الـ Core وإرسال الرد.
 
 ## Health
 

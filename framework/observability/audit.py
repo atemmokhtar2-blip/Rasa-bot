@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 from framework.infrastructure.sql import AuditLogORM, SQLDatabase
+from framework.security.redaction import SensitiveDataRedactor
 
 @dataclass
 class AuditEvent:
@@ -15,8 +16,9 @@ class AuditEvent:
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 class AuditLogger:
-    def __init__(self, database: SQLDatabase | None = None): self.database, self.events = database, []
+    def __init__(self, database: SQLDatabase | None = None, redactor: SensitiveDataRedactor | None = None): self.database, self.events, self.redactor = database, [], redactor or SensitiveDataRedactor()
     async def record(self, event: AuditEvent) -> AuditEvent:
+        event.changes = self.redactor.redact(event.changes)
         self.events.append(event)
         if self.database:
             async with self.database.session() as session:

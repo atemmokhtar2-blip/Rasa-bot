@@ -15,8 +15,9 @@ class APIKeyCreation:
     environment: str
 
 class DeveloperService:
-    def __init__(self, database: SQLDatabase | None = None):
+    def __init__(self, database: SQLDatabase | None = None, pepper: str = ""):
         self.database = database
+        self.pepper = pepper
         self.developers = InMemoryRepository()
         self.projects = InMemoryRepository()
         self.api_keys: dict[str, APIKeyRecord] = {}
@@ -41,7 +42,7 @@ class DeveloperService:
         return ProjectRecord(id=record.id, name=record.name, owner_id=record.owner_id, description=record.description, environment=record.environment, status=record.status, created_at=record.created_at, updated_at=record.updated_at)
 
     async def create_api_key(self, developer_id: str, project_id: str, environment: str, permissions: set[str]) -> APIKeyCreation:
-        secret, digest = generate_api_key(); key_id = "key_" + secrets.token_urlsafe(12)
+        secret, digest = generate_api_key(self.pepper); key_id = "key_" + secrets.token_urlsafe(12)
         if not self.database:
             project = await self.projects.get(project_id)
             if project is None or project.owner_id != developer_id: raise NotFoundError("Project not found for developer")
@@ -54,7 +55,7 @@ class DeveloperService:
         return APIKeyCreation(key_id, secret, project_id, environment)
 
     async def authenticate(self, secret: str) -> APIKeyRecord:
-        digest = hash_api_key(secret)
+        digest = hash_api_key(secret, self.pepper)
         if not self.database:
             for key in self.api_keys.values():
                 if key.secret_hash == digest and key.status == "active": key.last_used_at = datetime.now(timezone.utc); return key
@@ -91,14 +92,14 @@ class DeveloperService:
             old = self.api_keys.get(key_id)
             if old is None: raise NotFoundError("API key not found")
             old.status = "rotated"
-            secret, digest = generate_api_key(); new_id = "key_" + secrets.token_urlsafe(12)
+            secret, digest = generate_api_key(self.pepper); new_id = "key_" + secrets.token_urlsafe(12)
             self.api_keys[new_id] = APIKeyRecord(new_id, old.developer_id, old.project_id, old.environment, digest, old.permissions)
             return APIKeyCreation(new_id, secret, old.project_id, old.environment)
         async with self.database.session() as session:
             old = await session.get(APIKeyORM, key_id)
             if old is None: raise NotFoundError("API key not found")
             old.status = "rotated"
-            secret, digest = generate_api_key(); new_id = "key_" + secrets.token_urlsafe(12)
+            secret, digest = generate_api_key(self.pepper); new_id = "key_" + secrets.token_urlsafe(12)
             session.add(APIKeyORM(id=new_id, developer_id=old.developer_id, project_id=old.project_id, environment=old.environment, secret_hash=digest, permissions=old.permissions, status="active")); await session.commit()
             return APIKeyCreation(new_id, secret, old.project_id, old.environment)
         raise NotFoundError("API key not found")

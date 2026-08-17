@@ -15,33 +15,33 @@
 | Event Bus | Partial | يوجد EventBus داخلي مع أحداث pipeline، لكن لا يوجد persistence أو retry أو queue-backed delivery أو event schema registry. |
 | Actions | Partial | يوجد `Action` وRegistry واثنان من actions، لكن لا توجد policy selection أو permission checks أو confirmation أو audit. |
 | Tools | Partial | يوجد Interface وRegistry وToolExecutionService مع permission enforcement؛ ما زالت الأدوات الإنتاجية نفسها وresource quotas بحاجة لإضافتها. |
-| Plugins | Partial | يوجد Manifest وPluginRuntime مع timeout وpermission boundary؛ لا يوجد loader/dependency resolution/process/container isolation كاملة. |
-| Channel Abstraction | Partial | يوجد `ChannelAdapter` وTelegram normalization، لكن لا توجد channel registry أو bot management أو isolation دائمة. |
-| Telegram | Partial | يوجد webhook route و`sendMessage` و`setWebhook` وBotRegistry وsecret validation؛ ما زال تخزين bot metadata الدائم ومعالجة webhook عبر queue والتكامل متعدد البوتات بحاجة استكمال. |
+| Plugins | Partial | يوجد Manifest وPluginRuntime وPluginLoader وProcessPluginRunner مع timeout وpermission boundary؛ dependency lifecycle الكامل وcontainer sandboxing الشامل ما زالا ناقصين. |
+| Channel Abstraction | Partial | يوجد `ChannelAdapter` وTelegram normalization وBotRegistry؛ channel registry العامة والعزل الدائم لكل channel ما زالا ناقصين. |
+| Telegram | Partial | يوجد webhook route و`sendMessage` و`setWebhook` وsecret validation وPersistentBotRegistry وTelegramWebhookWorker؛ token management الفعلي متعدد البوتات واختبار Telegram الخارجي يحتاجان credentials تشغيلية. |
 | NLU/Rasa | Partial | يوجد providers وIntent/Entity registries وModelRegistry وEvaluationEngine وRasaTrainer؛ لا تزال deployment orchestration وactive model persistence غير مكتملة. |
 | Intents/Entities/Confidence | Partial | توجد prediction/entity dataclasses وIntent/Entity registries وnormalization/validation؛ يلزم استكمال confidence policy وmultiple-entity schemas وربطها بالتخزين. |
-| Sessions/Context/Dialogue/Policy | Partial | توجد modules مستقلة وتكاملها في الـ Engine، لكن لا توجد persistence أو flow registry أو required-entity prompting مكتمل. |
+| Sessions/Context/Dialogue/Policy | Partial | توجد modules مستقلة وتكاملها في الـ Engine وPersistentSessionManager؛ flow registry وrequired-entity prompting المتقدم ما زالا ناقصين. |
 | Developers/Projects | Partial | DeveloperService يستخدم PostgreSQL عند ضبط DATABASE_URL وInMemory في development، لكن environment isolation وauthorization الكاملين ما زالا ناقصين. |
-| API Keys | Partial | generation/hash/auth/revoke/rotate/expire/disable/list وmiddleware موجودة، وPostgreSQL persistence متاح؛ يلزم pepper فعلي وenforcement موحد لكل management endpoints. |
+| API Keys | Partial | generation وHMAC pepper hashing وauth/revoke/rotate/expire/disable/list وPostgreSQL persistence موجودة؛ تدوير pepper بدون downtime وsecret manager خارجي ما زالا مطلوبين. |
 | Permissions | Partial | تمت إضافة PermissionService وفحص API keys/tools/plugins؛ لا تزال كل routes/actions/plugins بحاجة إلى enforcement مركزي موحد. |
 | Rate Limiting | Partial | تمت إضافة FixedWindow محلي وRedisRateLimiter موزع، وربط limiter بمصادقة API key؛ يلزم توسيع السياسات per project/developer/IP/endpoint. |
 | Usage Metering | Partial | UsageMeter يسجل message usage ويجمع totals، ويدعم PostgreSQL؛ يلزم توسيع metrics لكل action/tool/training/storage. |
-| Database | Partial | توجد SQLAlchemy async models وPostgreSQL URL وschema creation وmigration وRepositories، مع InMemory محصور في fallback development؛ ما زالت بقية domain tables والمigrations التفصيلية ناقصة. |
+| Database | Partial | توجد SQLAlchemy models لكل النطاقات الأساسية وPostgreSQL وAlembic revision وRepositories واختبار PostgreSQL حقيقي؛ بعض جداول الإعدادات والـ registry التفصيلية ما زالت ناقصة. |
 | Redis/Cache | Partial | يوجد RedisProvider وRedisCache وRedisRateLimiter وRedisQueue؛ يلزم ربط cache policies وfailure behavior التفصيلي. |
-| Queue/Workers | Partial | يوجد RedisQueue وQueueWorker وretry وDLQ وentrypoint؛ يلزم ربط كل jobs الفعلية وإضافة observability للـ workers. |
-| Datasets/Training | Partial | تمت إضافة schema/versioning/validation/normalization/deduplication/quality وRasaTrainer؛ يلزم تخزين datasets/jobs الدائم. |
-| Model Registry/Training/Evaluation | Partial | تمت إضافة Registry وTraining Job وEvaluation metrics وdeployment؛ لا تزال persistence وrollback/canary orchestration ناقصة. |
-| API Layer | Partial | يوجد FastAPI و`/api/v1` وPydantic schemas وhealth/readiness وrequest IDs وAPI-key auth/rate limit؛ ما زالت routes كثيرة غير مكتملة وauth ليست موحدة لكل endpoints. |
-| Error System | Partial | hierarchy وstandard Framework/HTTP/Validation error handlers موجودة؛ redaction وcentralized tracing ما زالا ناقصين. |
-| Logging/Audit | Partial | يوجد structured logging وAuditLogger مع PostgreSQL persistence؛ ما زال trace context الكامل وredaction وretention policies ناقصًا. |
-| Security | Partial | يوجد SecretProvider وAPI-key hashing/auth وpermissions وwebhook secret وplugin runtime وinput schemas؛ ما زالت sandbox isolation وredaction وkey pepper/rotation persistence تحتاج استكمالًا. |
-| Testing | Partial | **22 اختبارًا ناجحًا** تشمل core/events/API/Telegram/state/SQL/datasets/models/security/plugins/integrations؛ ما زالت اختبارات PostgreSQL وRedis وTelegram الحقيقي وcontract suites بحاجة تشغيل بيئة الخدمات. |
+| Queue/Workers | Partial | يوجد RedisQueue وretry وDLQ وentrypoint وWorkers لـ events/training/Telegram/webhooks؛ observability وjob cancellation وbackoff المتقدم ما زالت ناقصة. |
+| Datasets/Training | Partial | توجد validation/normalization/deduplication/quality وDatasetRepository وTrainingJobRepository وRedis training worker وRasaTrainer؛ dataset artifact storage وlineage المتقدم ما زالا ناقصين. |
+| Model Registry/Training/Evaluation | Partial | توجد ModelRepository وEvaluation وRasa training وModelDeploymentService مع canary/rollback؛ registry API الكامل وartifact store وhealth-based promotion ما زالت ناقصة. |
+| API Layer | Partial | يوجد FastAPI و`/api/v1` وPydantic schemas وhealth/readiness وrequest/trace IDs وAPI-key auth/rate limit وauthorization لمسارات management الأساسية؛ ما زالت API surface الكاملة للمواصفة غير موجودة. |
+| Error System | Partial | hierarchy وstandard Framework/HTTP/Validation handlers وredaction وtrace propagation موجودة؛ error taxonomy لكل integration وcentralized tracing backend ما زالا ناقصين. |
+| Logging/Audit | Partial | يوجد structured logging وAuditLogger مع PostgreSQL persistence وredaction وtrace IDs؛ retention/export وcentralized log backend غير منفذة. |
+| Security | Partial | يوجد SecretProvider وHMAC pepper وAPI-key auth وpermissions وwebhook secret وredaction وPlugin process boundary وinput schemas؛ secret manager الخارجي وpolicy enforcement الشامل ما زالا مطلوبين. |
+| Testing | Partial | **25 اختبارًا ناجحًا** و2 skipped في الوضع المحلي، مع **2 اختبار تكامل ناجح** على PostgreSQL وRedis الحقيقيين؛ Telegram وRasa يتطلبان credentials وservices خارجية فعلية. |
 | Documentation | Partial | توجد architecture/getting-started/implementation plan، لكن لا توجد docs شاملة لكل الأقسام المطلوبة في المواصفة. |
 | Scalability/Deployment | Partial | Docker Compose يفصل API/Worker/PostgreSQL/Redis ويدعم stateless services؛ Kubernetes/autoscaling/failure orchestration ليست منفذة. |
 
 ## Current Status After First Correction Pass
 
-تمت إضافة طبقات Sessions/Context/Dialogue/Policy وPostgreSQL/Redis/Queue وDataset/Model وPermission/Rate-limit وUsage/Audit وBot/Plugin/Integration layers، وأصبحت الاختبارات `22 passed`. هذه الإضافات تقلل الفجوات لكنها لا تحول المشروع إلى مطابقة كاملة.
+تمت إضافة Persistent Sessions وPostgreSQL/Alembic/Repositories وRedis/Queue/Workers وDataset/Training/Model Deployment وPermission/Rate-limit وUsage/Audit وBot/Plugin/Integration layers، وأصبحت الاختبارات `25 passed` مع اختبارين خارجيين ناجحين. لا تزال بعض المتطلبات التشغيلية المتقدمة غير مغلقة.
 
 ## Immediate Correction Priority
 

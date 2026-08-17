@@ -1,4 +1,5 @@
 from uuid import uuid4
+import inspect
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -8,21 +9,29 @@ from framework.errors import FrameworkError
 from framework.logging import configure_logging
 from framework.actions.base import HelpAction, StartAction
 from framework.api.auth import authenticate_api_request, require_permission
-from framework.api.schemas import APIKeyCreate, DeveloperCreate, MessageCreate, ProjectCreate
+from framework.api.schemas import APIKeyCreate, DatasetCreate, DeploymentCreate, DeveloperCreate, MessageCreate, ProjectCreate, TrainingCreate
 
 settings = get_settings()
 configure_logging(settings.log_level)
 container = ApplicationContainer(settings)
+
+async def authorize(request: Request, x_api_key: str | None, permission: str, project_id: str | None = None):
+    record = await authenticate_api_request(request, container, x_api_key)
+    require_permission(record, permission)
+    if project_id is not None and record.project_id != project_id and "*" not in record.permissions:
+        raise FrameworkError("API key is not authorized for this project")
+    return record
 container.actions.register(StartAction())
 container.actions.register(HelpAction())
 app = FastAPI(title=settings.app_name, version=settings.app_version)
 
 @app.middleware("http")
 async def request_context(request: Request, call_next):
-    request_id = request.headers.get("X-Request-ID", str(uuid4()))
+    request_id = request.headers.get("X-Request-ID") or request.headers.get("traceparent") or str(uuid4())
     request.state.request_id = request_id
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
+    response.headers["traceparent"] = request_id
     return response
 
 @app.exception_handler(RequestValidationError)
@@ -67,25 +76,76 @@ async def create_api_key(payload: APIKeyCreate, request: Request):
     created = await container.developers.create_api_key(payload.developer_id, payload.project_id, payload.environment, payload.permissions)
     return {"success": True, "data": {"key_id": created.key_id, "secret": created.secret, "project_id": created.project_id, "environment": created.environment}, "error": None, "request_id": request.state.request_id}
 
+@app.post("/api/v1/datasets")
+async def create_dataset(payload: DatasetCreate, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "datasets.write", payload.project_id)
+    if not container.dataset_repository:
+        raise FrameworkError("DATABASE_URL is required for dataset persistence")
+    from framework.infrastructure.sql import DatasetORM
+    from framework.datasets.system import DatasetVersion, TrainingExample
+    examples = [TrainingExample(text=example.text, intent=example.intent, entities=example.entities, metadata=example.metadata) for example in payload.examples]
+    prepared, report = container.dataset_pipeline.prepare(DatasetVersion(uuid4().hex, payload.version, payload.project_id, tuple(examples), payload.schema_version), {example.intent for example in examples}, {entity.get("name", "") for example in examples for entity in example.entities})
+    row = DatasetORM(id=prepared.dataset_id, project_id=prepared.project_id, version=prepared.version, status=prepared.status, schema_version=prepared.schema_version, examples=[example.__dict__ for example in prepared.examples])
+    await container.dataset_repository.save(row)
+    return {"success": True, "data": {"id": row.id, "project_id": row.project_id, "version": row.version, "status": row.status}, "error": None, "request_id": request.state.request_id}
+
+@app.post("/api/v1/training")
+async def create_training_job(payload: TrainingCreate, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "training.write", payload.project_id)
+    if not container.training_job_repository:
+        raise FrameworkError("DATABASE_URL is required for training job persistence")
+    if not container.redis:
+        raise FrameworkError("REDIS_URL is required to enqueue training jobs")
+    from framework.infrastructure.sql import TrainingJobORM
+    job = TrainingJobORM(id=uuid4().hex, project_id=payload.project_id, dataset_version=payload.dataset_version, provider="rasa", status="queued", metrics={})
+    await container.training_job_repository.save(job)
+    from framework.infrastructure.queue import RedisQueue
+    await RedisQueue(container.redis.client).publish("training", {"job_id": job.id, "project_id": job.project_id, "dataset_version": job.dataset_version, "config_path": payload.config_path, "output_dir": payload.output_dir})
+    return {"success": True, "data": {"id": job.id, "status": job.status, "provider": job.provider}, "error": None, "request_id": request.state.request_id}
+
+@app.post("/api/v1/models/deploy")
+async def deploy_model(payload: DeploymentCreate, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "models.deploy", payload.project_id)
+    if not container.deployment:
+        raise FrameworkError("DATABASE_URL is required for model deployment")
+    result = await container.deployment.deploy(payload.project_id, payload.model_id, payload.canary)
+    return {"success": True, "data": result.__dict__, "error": None, "request_id": request.state.request_id}
+
+@app.post("/api/v1/models/{project_id}/rollback")
+async def rollback_model(project_id: str, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "models.deploy", project_id)
+    if not container.deployment:
+        raise FrameworkError("DATABASE_URL is required for model deployment")
+    result = await container.deployment.rollback(project_id)
+    return {"success": True, "data": result.__dict__, "error": None, "request_id": request.state.request_id}
+
 @app.post("/api/v1/projects/{project_id}/bots")
-async def register_bot(project_id: str, payload: dict, request: Request):
+async def register_bot(project_id: str, payload: dict, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "bots.manage", project_id)
     from framework.channels.management import TelegramBot
     bot = container.bots.register(TelegramBot(project_id, payload["name"], payload["token_secret_ref"], metadata=payload.get("metadata", {})))
+    if inspect.isawaitable(bot): bot = await bot
     return {"success": True, "data": {"id": bot.id, "project_id": bot.project_id, "name": bot.name, "status": bot.status}, "error": None, "request_id": request.state.request_id}
 
 @app.post("/api/v1/bots/{bot_id}/enable")
-async def enable_bot(bot_id: str, request: Request):
+async def enable_bot(bot_id: str, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "bots.manage")
     bot = container.bots.enable(bot_id)
+    if inspect.isawaitable(bot): bot = await bot
     return {"success": True, "data": {"id": bot.id, "status": bot.status}, "error": None, "request_id": request.state.request_id}
 
 @app.post("/api/v1/bots/{bot_id}/disable")
-async def disable_bot(bot_id: str, request: Request):
+async def disable_bot(bot_id: str, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "bots.manage")
     bot = container.bots.disable(bot_id)
+    if inspect.isawaitable(bot): bot = await bot
     return {"success": True, "data": {"id": bot.id, "status": bot.status}, "error": None, "request_id": request.state.request_id}
 
 @app.post("/api/v1/bots/{bot_id}/webhook")
-async def set_bot_webhook(bot_id: str, payload: dict, request: Request):
+async def set_bot_webhook(bot_id: str, payload: dict, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "bots.manage")
     bot = container.bots.set_webhook(bot_id, payload["url"])
+    if inspect.isawaitable(bot): bot = await bot
     return {"success": True, "data": {"id": bot.id, "webhook_url": bot.webhook_url}, "error": None, "request_id": request.state.request_id}
 
 @app.get("/api/v1/projects/{project_id}/api-keys")
@@ -118,6 +178,10 @@ async def telegram_webhook(project_id: str, payload: dict, request: Request):
         from framework.errors import AuthenticationError
         raise AuthenticationError("Invalid Telegram webhook secret")
     adapter = TelegramAdapter(settings.telegram_bot_token)
+    if container.redis:
+        from framework.infrastructure.queue import RedisQueue
+        event_id = await RedisQueue(container.redis.client).publish("telegram_updates", {"project_id": project_id, "payload": payload, "request_id": request.state.request_id})
+        return {"success": True, "data": {"accepted": True, "event_id": event_id}, "error": None, "request_id": request.state.request_id}
     message = await adapter.normalize(payload, project_id=project_id)
     result = await container.engine.process_message(message)
     await adapter.send(result.response, recipient_id=message.chat_id)
