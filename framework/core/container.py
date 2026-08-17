@@ -11,6 +11,7 @@ from framework.security.policy import FixedWindowRateLimiter, PermissionService,
 from framework.observability import AuditLogger, UsageMeter
 from framework.infrastructure.sql import SQLDatabase
 from framework.infrastructure.redis import RedisProvider
+from framework.infrastructure.cache import RedisCache
 from framework.channels.management import BotRegistry, CommandRegistry
 from framework.datasets.pipeline import DatasetPipeline
 from framework.models.evaluation import EvaluationEngine
@@ -35,6 +36,7 @@ class ApplicationContainer:
         self.permissions = PermissionService()
         self.redis = RedisProvider(self.settings.redis_url) if self.settings.redis_url else None
         self.rate_limiter = RedisRateLimiter(self.redis) if self.redis else FixedWindowRateLimiter()
+        self.cache = RedisCache(self.redis) if self.redis else None
         self.usage = UsageMeter(self.database)
         self.audit = AuditLogger(self.database)
         self.engine = FrameworkEngine(self.nlu, self.events, self.actions, usage=self.usage, audit=self.audit, entities=self.entities)

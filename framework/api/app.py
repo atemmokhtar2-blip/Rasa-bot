@@ -41,7 +41,16 @@ async def framework_error_handler(request: Request, exc: FrameworkError):
 async def health(): return {"success": True, "data": {"status": "healthy", "version": settings.app_version}, "error": None}
 
 @app.get("/ready")
-async def ready(): return {"success": True, "data": {"status": "ready", "dependencies": {"database": "configured"}}, "error": None}
+async def ready():
+    dependencies = {"database": "not_configured", "redis": "not_configured"}
+    if container.database:
+        try: await container.database.ping(); dependencies["database"] = "ready"
+        except Exception: dependencies["database"] = "unavailable"
+    if container.redis:
+        try: await container.redis.ping(); dependencies["redis"] = "ready"
+        except Exception: dependencies["redis"] = "unavailable"
+    status = "ready" if all(value in {"ready", "not_configured"} for value in dependencies.values()) else "not_ready"
+    return {"success": status == "ready", "data": {"status": status, "dependencies": dependencies}, "error": None}
 
 @app.post("/api/v1/developers")
 async def create_developer(payload: DeveloperCreate, request: Request):
@@ -119,6 +128,6 @@ async def process_message(payload: MessageCreate, request: Request, x_api_key: s
     record = await authenticate_api_request(request, container, x_api_key)
     require_permission(record, "messages.write")
     from framework.core.models import IncomingMessage
-    message = IncomingMessage(project_id=payload.project_id, channel=payload.channel, user_id=payload.user_id, chat_id=payload.chat_id or payload.user_id, text=payload.text)
+    message = IncomingMessage(project_id=payload.project_id, channel=payload.channel, user_id=payload.user_id, chat_id=payload.chat_id or payload.user_id, text=payload.text, metadata={"permissions": sorted(record.permissions) if record else []})
     result = await container.engine.process_message(message)
     return {"success": True, "data": {"text": result.response.text, "intent": result.intent.name if result.intent else None, "confidence": result.intent.confidence if result.intent else None, "entities": [e.__dict__ if hasattr(e, "__dict__") else {"name": e.name, "value": e.value, "confidence": e.confidence} for e in result.entities], "trace": result.trace}, "error": None, "request_id": request.state.request_id}

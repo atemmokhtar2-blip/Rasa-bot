@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import AsyncIterator
-from sqlalchemy import DateTime, ForeignKey, JSON, String, Text, select
+from sqlalchemy import DateTime, ForeignKey, JSON, String, Text, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -73,6 +73,12 @@ class SQLDatabase:
             self.url = "postgresql+asyncpg://" + self.url.removeprefix("postgresql://")
         self.engine = create_async_engine(self.url, pool_pre_ping=True, pool_recycle=1800)
         self.session_factory = async_sessionmaker(self.engine, expire_on_commit=False)
+
+    async def ping(self) -> bool:
+        if not self.engine: self.connect()
+        async with self.engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+        return True
 
     async def create_schema(self) -> None:
         if not self.engine: self.connect()

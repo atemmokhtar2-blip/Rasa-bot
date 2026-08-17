@@ -4,7 +4,7 @@ from framework.core.models import IncomingMessage, OutgoingResponse, ProcessingR
 from framework.core.registries import ActionRegistry
 from framework.core.state import ContextEngine, DialogueManager, PolicyEngine, SessionManager
 from framework.nlu.registry import EntityRegistry
-from framework.errors import ActionError
+from framework.errors import ActionError, AuthorizationError
 from framework.observability import AuditEvent, AuditLogger, UsageEvent, UsageMeter
 
 class FrameworkEngine:
@@ -46,9 +46,15 @@ class FrameworkEngine:
         else:
             action = self.actions.resolve(decision.target)
             trace.append("ACTION_SELECTED")
+            granted_permissions = set(message.metadata.get("permissions", []))
+            required_permissions = set(getattr(action, "required_permissions", set()))
+            if required_permissions - granted_permissions and "*" not in granted_permissions:
+                raise AuthorizationError(f"Missing action permissions: {sorted(required_permissions - granted_permissions)}")
             try:
                 response = await action.execute({"message": message, "intent": intent, "entities": entities, "context": context, "session": session})
                 trace.append("ACTION_COMPLETED")
+            except AuthorizationError:
+                raise
             except Exception as exc:
                 await self.events.emit(FrameworkEvent("ACTION_FAILED", {"action": intent.name, "error": str(exc), "session_id": session.id}))
                 raise ActionError("Action execution failed") from exc
