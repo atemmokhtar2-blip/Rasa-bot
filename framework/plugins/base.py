@@ -17,6 +17,6 @@ class PluginManifest:
 
 class Plugin:
     manifest: PluginManifest
-    async def initialize(self, context: dict[str, Any]) -> None: pass
-    async def register(self, actions: ActionRegistry, tools: ToolRegistry) -> None: pass
-    async def shutdown(self) -> None: pass
+    async def initialize(self, context: dict[str, Any]) -> None: raise NotImplementedError
+    async def register(self, actions: ActionRegistry, tools: ToolRegistry) -> None: raise NotImplementedError
+    async def shutdown(self) -> None: raise NotImplementedError

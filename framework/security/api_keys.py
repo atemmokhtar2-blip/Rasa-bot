@@ -15,6 +15,7 @@ class APIKeyRecord:
     status: str = "active"
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_used_at: datetime | None = None
+    expires_at: datetime | None = None
 
 def generate_api_key(pepper: str = "") -> tuple[str, str]:
     secret = "adf_" + secrets.token_urlsafe(32)

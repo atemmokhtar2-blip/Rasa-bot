@@ -1,8 +1,15 @@
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from typing import Any
 
 class DeveloperCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     email: EmailStr
+
+class ProjectUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=10000)
+    environment: str | None = Field(default=None, pattern="^(development|staging|production)$")
+    status: str | None = Field(default=None, pattern="^(active|suspended|archived)$")
 
 class ProjectCreate(BaseModel):
     owner_id: str = Field(min_length=1)
@@ -26,8 +33,8 @@ class MessageCreate(BaseModel):
 class TrainingExampleInput(BaseModel):
     text: str = Field(min_length=1, max_length=10000)
     intent: str = Field(min_length=1, max_length=255)
-    entities: list[dict] = []
-    metadata: dict = {}
+    entities: list[dict[str, Any]] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 class DatasetCreate(BaseModel):
     project_id: str = Field(min_length=1)

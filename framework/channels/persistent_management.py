@@ -8,6 +8,9 @@ class PersistentBotRegistry:
     async def register(self, bot: TelegramBot) -> TelegramBot:
         row = await self.repository.save(BotORM(id=bot.id, project_id=bot.project_id, name=bot.name, token_secret_ref=bot.token_secret_ref, status=bot.status, webhook_url=bot.webhook_url, metadata_json=bot.metadata))
         return self._domain(row)
+    async def list_for_project(self, project_id: str) -> list[TelegramBot]:
+        rows = await self.repository.list_project(project_id)
+        return [self._domain(row) for row in rows]
     async def get(self, bot_id: str) -> TelegramBot | None:
         row = await self.repository.get(bot_id)
         return self._domain(row) if row else None

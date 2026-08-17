@@ -28,6 +28,7 @@ from framework.datasets.artifacts import DatasetArtifactService
 from framework.infrastructure.object_storage import ObjectStorageSettings, S3ObjectStorage
 from framework.models.evaluation import EvaluationEngine
 from framework.models.training import RasaTrainer
+from framework.models.artifacts import ModelArtifactService
 from framework.models.deployment import ModelDeploymentService
 from framework.plugins.runtime import PluginRuntime
 from framework.plugins.loader import PluginLoader
@@ -73,6 +74,7 @@ class ApplicationContainer:
         self.dataset_pipeline = DatasetPipeline()
         self.object_storage = S3ObjectStorage(ObjectStorageSettings(self.settings.s3_endpoint_url, self.settings.s3_bucket, self.settings.s3_region, self.settings.s3_access_key, self.settings.s3_secret_key)) if self.database and self.settings.s3_bucket else None
         self.dataset_artifacts = DatasetArtifactService(self.object_storage, self.database) if self.object_storage and self.database else None
+        self.model_artifacts = ModelArtifactService(self.object_storage) if self.object_storage else None
         self.evaluation = EvaluationEngine()
         self.trainer = RasaTrainer()
         self.deployment = ModelDeploymentService(self.model_repository) if self.model_repository else None

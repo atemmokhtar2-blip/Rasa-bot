@@ -24,6 +24,14 @@ class UsageMeter:
                 session.add(UsageEventORM(id=event.id, project_id=event.project_id, metric=event.metric, quantity=event.quantity, request_id=event.request_id, metadata_json=event.metadata, created_at=event.created_at))
                 await session.commit()
         return event
+    async def list_events(self, project_id: str, limit: int = 100) -> list[UsageEvent]:
+        limit = max(1, min(limit, 1000))
+        if not self.database:
+            return [event for event in self.events if event.project_id == project_id][-limit:]
+        async with self.database.session() as session:
+            rows = (await session.execute(select(UsageEventORM).where(UsageEventORM.project_id == project_id).order_by(UsageEventORM.created_at.desc()).limit(limit))).scalars().all()
+            return [UsageEvent(project_id=row.project_id, metric=row.metric, quantity=row.quantity, request_id=row.request_id, metadata=dict(row.metadata_json or {}), id=row.id, created_at=row.created_at) for row in rows]
+
     async def totals(self, project_id: str) -> dict[str, int]:
         if not self.database:
             totals: dict[str, int] = {}

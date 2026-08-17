@@ -29,6 +29,10 @@ class TrainingJobRepository:
     def __init__(self, db: SQLDatabase): self.db = db
     async def save(self, row: TrainingJobORM) -> TrainingJobORM:
         async with self.db.session() as session: session.add(row); await session.commit(); await session.refresh(row); return row
+    async def get(self, job_id: str) -> TrainingJobORM | None:
+        async with self.db.session() as session: return await session.get(TrainingJobORM, job_id)
+    async def list_project(self, project_id: str) -> list[TrainingJobORM]:
+        async with self.db.session() as session: return list((await session.execute(select(TrainingJobORM).where(TrainingJobORM.project_id == project_id))).scalars().all())
     async def update(self, job_id: str, **values) -> TrainingJobORM:
         async with self.db.session() as session:
             row = await session.get(TrainingJobORM, job_id)
@@ -42,6 +46,8 @@ class BotRepository:
         async with self.db.session() as session: session.add(row); await session.commit(); await session.refresh(row); return row
     async def get(self, bot_id: str) -> BotORM | None:
         async with self.db.session() as session: return await session.get(BotORM, bot_id)
+    async def list_project(self, project_id: str) -> list[BotORM]:
+        async with self.db.session() as session: return list((await session.execute(select(BotORM).where(BotORM.project_id == project_id))).scalars().all())
     async def set_status(self, bot_id: str, status: str) -> BotORM:
         async with self.db.session() as session:
             row = await session.get(BotORM, bot_id)
