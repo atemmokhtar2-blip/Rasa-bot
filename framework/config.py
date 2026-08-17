@@ -13,6 +13,15 @@ class Settings(BaseSettings):
     rasa_endpoint: str | None = None
     worker_max_retries: int = 3
     api_key_pepper: str = "development-only-change-me"
+    s3_endpoint_url: str | None = None
+    s3_bucket: str | None = None
+    s3_region: str = "us-east-1"
+    s3_access_key: str | None = None
+    s3_secret_key: str | None = None
+    secret_manager_url: str | None = None
+    secret_manager_token: str | None = None
+    otel_exporter_endpoint: str | None = None
+    audit_retention_days: int = 365
     model_config = SettingsConfigDict(env_file=(".env", ".env.development"), extra="ignore")
 
 @lru_cache

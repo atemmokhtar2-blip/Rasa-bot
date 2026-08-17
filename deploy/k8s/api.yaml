@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rasa-bot-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: rasa-bot-api}
+  template:
+    metadata:
+      labels: {app: rasa-bot-api}
+    spec:
+      containers:
+        - name: api
+          image: ${IMAGE_REPOSITORY}:${IMAGE_TAG}
+          command: ["uvicorn", "framework.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+          ports: [{containerPort: 8000}]
+          envFrom:
+            - secretRef: {name: rasa-bot-secrets}
+            - configMapRef: {name: rasa-bot-config}
+          readinessProbe:
+            httpGet: {path: /ready, port: 8000}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 20
+          resources:
+            requests: {cpu: "100m", memory: "256Mi"}
+            limits: {cpu: "1000m", memory: "1Gi"}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rasa-bot-api
+spec:
+  selector: {app: rasa-bot-api}
+  ports: [{name: http, port: 80, targetPort: 8000}]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: rasa-bot-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: rasa-bot-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 70}

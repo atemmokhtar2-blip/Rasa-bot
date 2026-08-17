@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rasa-bot-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: rasa-bot-worker}
+  template:
+    metadata:
+      labels: {app: rasa-bot-worker}
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: worker
+          image: ${IMAGE_REPOSITORY}:${IMAGE_TAG}
+          command: ["python", "-m", "framework.workers.entrypoint"]
+          envFrom:
+            - secretRef: {name: rasa-bot-secrets}
+            - configMapRef: {name: rasa-bot-config}
+          resources:
+            requests: {cpu: "100m", memory: "256Mi"}
+            limits: {cpu: "1000m", memory: "1Gi"}

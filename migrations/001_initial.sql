@@ -20,3 +20,5 @@ CREATE TABLE IF NOT EXISTS bots (id VARCHAR(64) PRIMARY KEY, project_id VARCHAR(
 CREATE INDEX IF NOT EXISTS ix_bots_project_id ON bots(project_id);
 CREATE TABLE IF NOT EXISTS training_jobs (id VARCHAR(64) PRIMARY KEY, project_id VARCHAR(64) NOT NULL, dataset_version VARCHAR(64) NOT NULL, provider VARCHAR(64) NOT NULL, status VARCHAR(32) NOT NULL, metrics JSONB NOT NULL DEFAULT '{}'::jsonb, artifact_uri TEXT, error TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
 CREATE INDEX IF NOT EXISTS ix_training_jobs_project_id ON training_jobs(project_id);
+ALTER TABLE datasets ADD COLUMN IF NOT EXISTS artifact_uri TEXT;
+ALTER TABLE datasets ADD COLUMN IF NOT EXISTS lineage JSONB NOT NULL DEFAULT '{}'::jsonb;

@@ -2,11 +2,12 @@ from uuid import uuid4
 import inspect
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from framework.config import get_settings
 from framework.core.container import ApplicationContainer
 from framework.errors import FrameworkError
 from framework.logging import configure_logging
+from framework.observability.tracing import span
 from framework.actions.base import HelpAction, StartAction
 from framework.api.auth import authenticate_api_request, require_permission
 from framework.api.schemas import APIKeyCreate, DatasetCreate, DeploymentCreate, DeveloperCreate, MessageCreate, ProjectCreate, TrainingCreate
@@ -29,7 +30,10 @@ app = FastAPI(title=settings.app_name, version=settings.app_version)
 async def request_context(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID") or request.headers.get("traceparent") or str(uuid4())
     request.state.request_id = request_id
-    response = await call_next(request)
+    container.metrics.inc("framework_requests_total", method=request.method, path=request.url.path)
+    with span("http.request", {"http.method": request.method, "http.path": request.url.path, "request.id": request_id}):
+        response = await call_next(request)
+    container.metrics.inc("framework_responses_total", method=request.method, path=request.url.path, status=str(response.status_code))
     response.headers["X-Request-ID"] = request_id
     response.headers["traceparent"] = request_id
     return response
@@ -45,6 +49,9 @@ async def http_error_handler(request: Request, exc: HTTPException):
 @app.exception_handler(FrameworkError)
 async def framework_error_handler(request: Request, exc: FrameworkError):
     return JSONResponse(status_code=exc.status_code, content={"success": False, "data": None, "error": {"code": exc.code, "message": exc.message}, "request_id": getattr(request.state, "request_id", None)})
+
+@app.get("/metrics")
+async def metrics(): return PlainTextResponse(container.metrics.render(), media_type="text/plain; version=0.0.4")
 
 @app.get("/health")
 async def health(): return {"success": True, "data": {"status": "healthy", "version": settings.app_version}, "error": None}

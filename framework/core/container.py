@@ -10,14 +10,22 @@ from framework.developers.service import DeveloperService
 from framework.datasets.system import DatasetRegistry
 from framework.models.registry import ModelRegistry
 from framework.security.policy import FixedWindowRateLimiter, PermissionService, RedisRateLimiter
+from framework.security.secrets import EnvironmentSecretProvider, HttpSecretProvider
 from framework.observability import AuditLogger, UsageMeter
+from framework.observability.metrics import MetricsRegistry
+from framework.observability.tracing import configure_tracing
 from framework.infrastructure.sql import SQLDatabase
 from framework.infrastructure.redis import RedisProvider
 from framework.infrastructure.cache import RedisCache
+from framework.infrastructure.queue import RedisQueue
 from framework.infrastructure.domain_repositories import BotRepository, DatasetRepository, ModelRepository, TrainingJobRepository
 from framework.channels.management import BotRegistry, CommandRegistry
 from framework.channels.persistent_management import PersistentBotRegistry
+from framework.channels.registry import ChannelRegistry
+from framework.channels.telegram import TelegramAdapter
 from framework.datasets.pipeline import DatasetPipeline
+from framework.datasets.artifacts import DatasetArtifactService
+from framework.infrastructure.object_storage import ObjectStorageSettings, S3ObjectStorage
 from framework.models.evaluation import EvaluationEngine
 from framework.models.training import RasaTrainer
 from framework.models.deployment import ModelDeploymentService
@@ -25,12 +33,16 @@ from framework.plugins.runtime import PluginRuntime
 from framework.plugins.loader import PluginLoader
 from framework.plugins.process_runner import ProcessPluginRunner
 from framework.core.integrations import ToolExecutionService, WebhookRegistry
+from framework.core.event_delivery import EventSchemaRegistry, QueuedEventPublisher
 
 class ApplicationContainer:
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or get_settings()
+        configure_tracing(self.settings.otel_exporter_endpoint, self.settings.app_name)
+        self.secrets = HttpSecretProvider(self.settings.secret_manager_url, self.settings.secret_manager_token) if self.settings.secret_manager_url and self.settings.secret_manager_token else EnvironmentSecretProvider()
         self.database = SQLDatabase(self.settings.database_url) if self.settings.database_url != "memory://" else None
         self.events = EventBus()
+        self.event_schemas = EventSchemaRegistry()
         self.actions = ActionRegistry()
         self.tools = ToolRegistry()
         self.plugins = PluginRegistry()
@@ -45,16 +57,22 @@ class ApplicationContainer:
         self.redis = RedisProvider(self.settings.redis_url) if self.settings.redis_url else None
         self.rate_limiter = RedisRateLimiter(self.redis) if self.redis else FixedWindowRateLimiter()
         self.cache = RedisCache(self.redis) if self.redis else None
+        self.event_publisher = QueuedEventPublisher(RedisQueue(self.redis.client), self.event_schemas) if self.redis else None
         self.dataset_repository = DatasetRepository(self.database) if self.database else None
         self.model_repository = ModelRepository(self.database) if self.database else None
         self.training_job_repository = TrainingJobRepository(self.database) if self.database else None
         self.bot_repository = BotRepository(self.database) if self.database else None
         self.usage = UsageMeter(self.database)
+        self.metrics = MetricsRegistry()
         self.audit = AuditLogger(self.database)
         self.engine = FrameworkEngine(self.nlu, self.events, self.actions, usage=self.usage, audit=self.audit, entities=self.entities, sessions=self.sessions)
         self.bots = PersistentBotRegistry(self.bot_repository) if self.bot_repository else BotRegistry()
         self.commands = CommandRegistry()
+        self.channels = ChannelRegistry()
+        self.channels.register("telegram", lambda **kwargs: TelegramAdapter(kwargs.get("token")))
         self.dataset_pipeline = DatasetPipeline()
+        self.object_storage = S3ObjectStorage(ObjectStorageSettings(self.settings.s3_endpoint_url, self.settings.s3_bucket, self.settings.s3_region, self.settings.s3_access_key, self.settings.s3_secret_key)) if self.database and self.settings.s3_bucket else None
+        self.dataset_artifacts = DatasetArtifactService(self.object_storage, self.database) if self.object_storage and self.database else None
         self.evaluation = EvaluationEngine()
         self.trainer = RasaTrainer()
         self.deployment = ModelDeploymentService(self.model_repository) if self.model_repository else None

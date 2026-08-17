@@ -10,16 +10,18 @@ class QueueWorker:
     async def run_once(self) -> bool:
         envelope = await self.queue.consume(self.topic, timeout=1)
         if not envelope: return False
-        attempts = int(envelope.get("attempts", 0))
+        payload = envelope["payload"]
+        attempts = int(payload.get("_attempts", 0))
         try:
-            await self.handler(envelope["payload"])
+            await self.handler(payload)
         except Exception as exc:
             attempts += 1
-            envelope["attempts"] = attempts
+            payload["_attempts"] = attempts
             if attempts >= self.max_retries:
                 await self.queue.dead_letter(self.topic, envelope, str(exc))
             else:
-                await self.queue.publish(self.topic, envelope["payload"])
+                await asyncio.sleep(min(2 ** attempts, 30))
+                await self.queue.publish(self.topic, payload)
         return True
 
     async def run(self) -> None:

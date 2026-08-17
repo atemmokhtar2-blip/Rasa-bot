@@ -61,6 +61,8 @@ class DatasetORM(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
     examples: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    artifact_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lineage: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
 class ModelORM(Base):
