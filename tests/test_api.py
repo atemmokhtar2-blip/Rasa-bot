@@ -12,9 +12,16 @@ def test_health_and_ready_contract():
     assert ready.json()['data']['status'] == 'ready'
 
 
+def _message_key(client):
+    developer = client.post('/api/v1/developers', json={'name': 'Message Dev', 'email': 'message@example.com'}).json()['data']
+    project = client.post('/api/v1/projects', json={'owner_id': developer['id'], 'name': 'Message Project'}).json()['data']
+    return client.post('/api/v1/api-keys', json={'developer_id': developer['id'], 'project_id': project['id'], 'permissions': ['messages.write']}).json()['data']['secret']
+
+
 def test_message_api_contract():
     client = TestClient(app)
-    response = client.post('/api/v1/messages', json={
+    secret = _message_key(client)
+    response = client.post('/api/v1/messages', headers={'X-API-Key': secret}, json={
         'project_id': 'demo',
         'user_id': 'user-1',
         'text': '/start',
@@ -28,7 +35,8 @@ def test_message_api_contract():
 
 def test_telegram_is_not_required_by_core_api():
     client = TestClient(app)
-    response = client.post('/api/v1/messages', json={
+    secret = _message_key(client)
+    response = client.post('/api/v1/messages', headers={'X-API-Key': secret}, json={
         'project_id': 'demo',
         'user_id': 'user-1',
         'channel': 'api',
@@ -61,3 +69,18 @@ def test_telegram_webhook_pipeline_without_real_token():
     })
     assert response.status_code == 200
     assert response.json()['data']['intent'] == 'start'
+
+
+def test_message_requires_api_key_in_current_environment():
+    client = TestClient(app)
+    response = client.post('/api/v1/messages', json={'project_id': 'demo', 'user_id': 'u1', 'text': '/start'})
+    assert response.status_code == 401
+
+
+def test_message_rejects_insufficient_permission():
+    client = TestClient(app)
+    developer = client.post('/api/v1/developers', json={'name': 'Read Dev', 'email': 'read@example.com'}).json()['data']
+    project = client.post('/api/v1/projects', json={'owner_id': developer['id'], 'name': 'Read Project'}).json()['data']
+    secret = client.post('/api/v1/api-keys', json={'developer_id': developer['id'], 'project_id': project['id'], 'permissions': ['messages.read']}).json()['data']['secret']
+    response = client.post('/api/v1/messages', headers={'X-API-Key': secret}, json={'project_id': project['id'], 'user_id': 'u1', 'text': '/start'})
+    assert response.status_code == 403

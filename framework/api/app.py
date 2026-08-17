@@ -1,11 +1,12 @@
 from uuid import uuid4
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Header, Request
 from fastapi.responses import JSONResponse
 from framework.config import get_settings
 from framework.core.container import ApplicationContainer
 from framework.errors import FrameworkError
 from framework.logging import configure_logging
 from framework.actions.base import HelpAction, StartAction
+from framework.api.auth import authenticate_api_request, require_permission
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -57,7 +58,9 @@ async def telegram_webhook(project_id: str, payload: dict, request: Request):
     return {"success": True, "data": {"message_id": message.message_id, "intent": result.intent.name if result.intent else None, "trace": result.trace}, "error": None, "request_id": request.state.request_id}
 
 @app.post("/api/v1/messages")
-async def process_message(payload: dict, request: Request):
+async def process_message(payload: dict, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    record = await authenticate_api_request(request, container, x_api_key)
+    require_permission(record, "messages.write")
     from framework.core.models import IncomingMessage
     message = IncomingMessage(project_id=payload["project_id"], channel=payload.get("channel", "api"), user_id=str(payload["user_id"]), chat_id=str(payload.get("chat_id", payload["user_id"])), text=payload.get("text"))
     result = await container.engine.process_message(message)
