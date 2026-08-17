@@ -24,6 +24,18 @@ class ModelDeploymentService:
             if previous and previous != model_id: await self.repository.set_status(previous, "ready")
             self.active[project_id] = model_id
         return DeploymentResult(model_id, "canary" if canary else "deployed", previous, datetime.now(timezone.utc))
+    async def promote_canary(self, project_id: str, model_id: str, healthy: bool, reason: str = "") -> DeploymentResult:
+        rows = await self.repository.list_project(project_id)
+        model = next((row for row in rows if row.id == model_id), None)
+        if model is None: raise ValueError(f"Model {model_id} does not belong to project {project_id}")
+        metrics = dict(model.metrics or {})
+        metrics["health"] = {"healthy": healthy, "reason": reason}
+        await self.repository.update_metrics(model_id, metrics)
+        if not healthy:
+            await self.repository.set_status(model_id, "failed")
+            return DeploymentResult(model_id, "failed", await self._active_model(project_id), datetime.now(timezone.utc))
+        return await self.deploy(project_id, model_id, canary=False)
+
     async def rollback(self, project_id: str) -> DeploymentResult:
         previous = await self._active_model(project_id)
         if previous is None: raise ValueError(f"No active model for project {project_id}")

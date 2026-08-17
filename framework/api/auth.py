@@ -8,6 +8,7 @@ async def authenticate_api_request(request: Request, container: ApplicationConta
             return None
         raise AuthenticationError("X-API-Key header is required")
     record = await container.developers.authenticate(api_key)
+    record.permissions = container.permissions.expand(record.permissions)
     request.state.api_key = record
     if not container.rate_limiter.allow(f"key:{record.key_id}"):
         raise AuthorizationError("Rate limit exceeded")

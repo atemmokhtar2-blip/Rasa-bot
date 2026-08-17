@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from typing import Any
@@ -18,6 +19,10 @@ class AuditEvent:
 
 class AuditLogger:
     def __init__(self, database: SQLDatabase | None = None, redactor: SensitiveDataRedactor | None = None): self.database, self.events, self.redactor = database, [], redactor or SensitiveDataRedactor()
+    async def export_project(self, project_id: str, limit: int = 1000) -> bytes:
+        events = await self.list_project(project_id, limit)
+        return b"".join((json.dumps({"id": event.id, "event_name": event.event_name, "actor_id": event.actor_id, "project_id": event.project_id, "changes": event.changes, "created_at": event.created_at.isoformat()}, ensure_ascii=False) + "\\n").encode() for event in events)
+
     async def purge_older_than(self, retention_days: int) -> int:
         if retention_days < 1: raise ValueError("retention_days must be positive")
         cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)

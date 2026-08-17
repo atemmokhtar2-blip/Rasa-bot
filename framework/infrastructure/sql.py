@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import AsyncIterator
-from sqlalchemy import DateTime, ForeignKey, JSON, String, Text, select, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, JSON, String, Text, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -97,6 +97,7 @@ class TrainingJobORM(Base):
     metrics: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     artifact_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
 class UsageEventORM(Base):

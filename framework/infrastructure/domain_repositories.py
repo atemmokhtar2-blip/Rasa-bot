@@ -19,6 +19,11 @@ class ModelRepository:
         async with self.db.session() as session: return await session.get(ModelORM, model_id)
     async def list_project(self, project_id: str) -> list[ModelORM]:
         async with self.db.session() as session: return list((await session.execute(select(ModelORM).where(ModelORM.project_id == project_id))).scalars().all())
+    async def update_metrics(self, model_id: str, metrics: dict) -> ModelORM:
+        async with self.db.session() as session:
+            row = await session.get(ModelORM, model_id)
+            if row is None: raise KeyError(model_id)
+            row.metrics = metrics; await session.commit(); await session.refresh(row); return row
     async def set_status(self, model_id: str, status: str) -> ModelORM:
         async with self.db.session() as session:
             row = await session.get(ModelORM, model_id)
@@ -33,6 +38,14 @@ class TrainingJobRepository:
         async with self.db.session() as session: return await session.get(TrainingJobORM, job_id)
     async def list_project(self, project_id: str) -> list[TrainingJobORM]:
         async with self.db.session() as session: return list((await session.execute(select(TrainingJobORM).where(TrainingJobORM.project_id == project_id))).scalars().all())
+    async def request_cancel(self, job_id: str) -> TrainingJobORM:
+        async with self.db.session() as session:
+            row = await session.get(TrainingJobORM, job_id)
+            if row is None: raise KeyError(job_id)
+            if row.status in {"ready", "failed", "cancelled"}: return row
+            row.cancel_requested = True
+            if row.status == "queued": row.status = "cancelled"
+            await session.commit(); await session.refresh(row); return row
     async def update(self, job_id: str, **values) -> TrainingJobORM:
         async with self.db.session() as session:
             row = await session.get(TrainingJobORM, job_id)

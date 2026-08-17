@@ -13,5 +13,6 @@ async def test_domain_repositories_persist_all_core_records(tmp_path):
     assert (await DatasetRepository(db).get(dataset.id)).version == 'v1'
     assert (await ModelRepository(db).set_status(model.id, 'deployed')).status == 'deployed'
     assert (await TrainingJobRepository(db).update(job.id, status='running')).status == 'running'
+    assert (await TrainingJobRepository(db).request_cancel(job.id)).cancel_requested is True
     assert (await BotRepository(db).set_status(bot.id, 'enabled')).status == 'enabled'
     await db.dispose()

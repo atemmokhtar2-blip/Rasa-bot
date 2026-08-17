@@ -9,7 +9,17 @@ class Permission:
     description: str = ""
 
 class PermissionService:
+    ROLE_PERMISSIONS = {
+        "viewer": {"projects.read", "datasets.read", "training.read", "models.read", "bots.read", "usage.read", "audit.read", "keys.read"},
+        "developer": {"projects.read", "projects.write", "datasets.read", "datasets.write", "training.read", "training.write", "models.read", "models.evaluate", "models.deploy", "bots.read", "bots.manage", "usage.read", "audit.read", "keys.read", "keys.write", "messages.write"},
+        "admin": {"*"},
+    }
     def __init__(self): self._grants: dict[str, set[str]] = {}
+    def expand(self, permissions: set[str]) -> set[str]:
+        expanded = set(permissions)
+        for permission in permissions:
+            if permission.startswith("role:"): expanded.update(self.ROLE_PERMISSIONS.get(permission.split(":", 1)[1], set()))
+        return expanded
     def grant(self, subject_id: str, permission: str) -> None: self._grants.setdefault(subject_id, set()).add(permission)
     def revoke(self, subject_id: str, permission: str) -> None: self._grants.setdefault(subject_id, set()).discard(permission)
     def check(self, subject_id: str, required: str) -> bool:

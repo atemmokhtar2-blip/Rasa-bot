@@ -1,3 +1,4 @@
+import asyncio
 from framework.infrastructure.queue import RedisQueue
 from framework.infrastructure.domain_repositories import TrainingJobRepository, ModelRepository
 from framework.infrastructure.sql import ModelORM
@@ -12,6 +13,11 @@ class TrainingJobWorker:
         if not envelope: return False
         payload = envelope["payload"]
         job_id = payload["job_id"]
+        current = await self.repository.get(job_id)
+        if current is None: return True
+        if current.cancel_requested or current.status == "cancelled":
+            await self.repository.update(job_id, status="cancelled", error="Cancellation requested before execution")
+            return True
         await self.repository.update(job_id, status="training")
         try:
             result = await self.trainer.train(payload["project_id"], payload["dataset_version"], payload["config_path"], payload["output_dir"])
@@ -23,6 +29,9 @@ class TrainingJobWorker:
             await self.repository.update(job_id, status=result.status, artifact_uri=artifact_uri, metrics=metrics, error=result.error)
             if self.model_repository and artifact_uri:
                 await self.model_repository.save(ModelORM(id=uuid4().hex, project_id=payload['project_id'], version=payload['dataset_version'], dataset_id=payload['dataset_version'], artifact_uri=artifact_uri, status='ready', metrics=metrics))
+        except asyncio.CancelledError:
+            await self.repository.update(job_id, status="cancelled", error="Worker task cancelled")
+            raise
         except Exception as exc:
             await self.repository.update(job_id, status="failed", error=str(exc))
         return True

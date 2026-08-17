@@ -48,6 +48,23 @@ class TrainingCreate(BaseModel):
     config_path: str = Field(min_length=1)
     output_dir: str = Field(min_length=1)
 
+class EvaluationSample(BaseModel):
+    expected_intent: str
+    predicted_intent: str
+    confidence: float = Field(ge=0, le=1)
+    expected_entities: dict[str, Any] = Field(default_factory=dict)
+    entities: list[dict[str, Any]] = Field(default_factory=list)
+    action_success: bool = False
+
+class ModelEvaluationCreate(BaseModel):
+    project_id: str = Field(min_length=1)
+    samples: list[EvaluationSample] = Field(min_length=1)
+
+class ModelHealthUpdate(BaseModel):
+    project_id: str = Field(min_length=1)
+    healthy: bool
+    reason: str = Field(default="", max_length=1000)
+
 class DeploymentCreate(BaseModel):
     project_id: str = Field(min_length=1)
     model_id: str = Field(min_length=1)

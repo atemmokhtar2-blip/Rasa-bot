@@ -10,7 +10,7 @@ from framework.logging import configure_logging
 from framework.observability.tracing import span
 from framework.actions.base import HelpAction, StartAction
 from framework.api.auth import authenticate_api_request, require_permission
-from framework.api.schemas import APIKeyCreate, DatasetCreate, DeploymentCreate, DeveloperCreate, MessageCreate, ProjectCreate, ProjectUpdate, TrainingCreate
+from framework.api.schemas import APIKeyCreate, DatasetCreate, DeploymentCreate, DeveloperCreate, MessageCreate, ModelEvaluationCreate, ModelHealthUpdate, ProjectCreate, ProjectUpdate, TrainingCreate
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -68,6 +68,12 @@ async def project_audit_logs(project_id: str, request: Request, limit: int = 100
     data = [{"id": event.id, "event_name": event.event_name, "actor_id": event.actor_id, "project_id": event.project_id, "changes": event.changes, "created_at": event.created_at.isoformat()} for event in events]
     return {"success": True, "data": data, "error": None, "request_id": request.state.request_id}
 
+@app.get("/api/v1/projects/{project_id}/audit-logs/export")
+async def export_project_audit(project_id: str, request: Request, limit: int = 1000, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "audit.read", project_id)
+    body = await container.audit.export_project(project_id, limit)
+    return PlainTextResponse(body, media_type="application/x-ndjson", headers={"Content-Disposition": f'attachment; filename="audit-{project_id}.ndjson"', "X-Request-ID": request.state.request_id})
+
 @app.get("/metrics")
 async def metrics(): return PlainTextResponse(container.metrics.render(), media_type="text/plain; version=0.0.4")
 
@@ -76,13 +82,19 @@ async def health(): return {"success": True, "data": {"status": "healthy", "vers
 
 @app.get("/ready")
 async def ready():
-    dependencies = {"database": "not_configured", "redis": "not_configured"}
+    dependencies = {"database": "not_configured", "redis": "not_configured", "object_storage": "not_configured", "secret_manager": "not_configured"}
     if container.database:
         try: await container.database.ping(); dependencies["database"] = "ready"
         except Exception: dependencies["database"] = "unavailable"
     if container.redis:
         try: await container.redis.ping(); dependencies["redis"] = "ready"
         except Exception: dependencies["redis"] = "unavailable"
+    if container.object_storage:
+        try: await container.object_storage.ping(); dependencies["object_storage"] = "ready"
+        except Exception: dependencies["object_storage"] = "unavailable"
+    if hasattr(container.secrets, "ping"):
+        try: await container.secrets.ping(); dependencies["secret_manager"] = "ready"
+        except Exception: dependencies["secret_manager"] = "unavailable"
     status = "ready" if all(value in {"ready", "not_configured"} for value in dependencies.values()) else "not_ready"
     return {"success": status == "ready", "data": {"status": status, "dependencies": dependencies}, "error": None}
 
@@ -111,8 +123,11 @@ async def create_project(payload: ProjectCreate, request: Request):
 
 @app.get("/api/v1/projects")
 async def list_projects(request: Request, owner_id: str | None = None, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
-    await authorize(request, x_api_key, "projects.read")
-    rows = await container.developers.list_projects(owner_id)
+    record = await authorize(request, x_api_key, "projects.read")
+    if record is not None and "*" not in record.permissions:
+        rows = [await container.developers.get_project(record.project_id)]
+    else:
+        rows = await container.developers.list_projects(owner_id)
     data = [{"id": row.id, "name": row.name, "owner_id": row.owner_id, "description": row.description, "environment": row.environment, "status": row.status, "created_at": row.created_at.isoformat(), "updated_at": row.updated_at.isoformat()} for row in rows]
     return {"success": True, "data": data, "error": None, "request_id": request.state.request_id}
 
@@ -184,8 +199,25 @@ async def list_training_jobs(project_id: str, request: Request, x_api_key: str |
     await authorize(request, x_api_key, "training.read", project_id)
     if not container.training_job_repository: raise FrameworkError("DATABASE_URL is required for training job persistence")
     rows = await container.training_job_repository.list_project(project_id)
-    data = [{"id": row.id, "project_id": row.project_id, "dataset_version": row.dataset_version, "provider": row.provider, "status": row.status, "metrics": row.metrics, "artifact_uri": row.artifact_uri, "error": row.error, "created_at": row.created_at.isoformat()} for row in rows]
+    data = [{"id": row.id, "project_id": row.project_id, "dataset_version": row.dataset_version, "provider": row.provider, "status": row.status, "metrics": row.metrics, "artifact_uri": row.artifact_uri, "error": row.error, "cancel_requested": row.cancel_requested, "created_at": row.created_at.isoformat()} for row in rows]
     return {"success": True, "data": data, "error": None, "request_id": request.state.request_id}
+
+@app.post("/api/v1/training/{job_id}/cancel")
+async def cancel_training_job(job_id: str, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    if not container.training_job_repository: raise FrameworkError("DATABASE_URL is required for training job persistence")
+    job = await container.training_job_repository.get(job_id)
+    if job is None: raise NotFoundError("Training job not found")
+    await authorize(request, x_api_key, "training.write", job.project_id)
+    job = await container.training_job_repository.request_cancel(job_id)
+    return {"success": True, "data": {"id": job.id, "status": job.status, "cancel_requested": job.cancel_requested}, "error": None, "request_id": request.state.request_id}
+
+@app.get("/api/v1/training/{job_id}")
+async def get_training_job(job_id: str, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    if not container.training_job_repository: raise FrameworkError("DATABASE_URL is required for training job persistence")
+    row = await container.training_job_repository.get(job_id)
+    if row is None: raise NotFoundError("Training job not found")
+    await authorize(request, x_api_key, "training.read", row.project_id)
+    return {"success": True, "data": {"id": row.id, "project_id": row.project_id, "dataset_version": row.dataset_version, "provider": row.provider, "status": row.status, "metrics": row.metrics, "artifact_uri": row.artifact_uri, "error": row.error, "cancel_requested": row.cancel_requested, "created_at": row.created_at.isoformat()}, "error": None, "request_id": request.state.request_id}
 
 @app.get("/api/v1/projects/{project_id}/models")
 async def list_models(project_id: str, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
@@ -202,6 +234,34 @@ async def get_model(model_id: str, request: Request, x_api_key: str | None = Hea
     if row is None: raise NotFoundError("Model not found")
     await authorize(request, x_api_key, "models.read", row.project_id)
     return {"success": True, "data": {"id": row.id, "project_id": row.project_id, "version": row.version, "dataset_id": row.dataset_id, "artifact_uri": row.artifact_uri, "status": row.status, "metrics": row.metrics, "created_at": row.created_at.isoformat()}, "error": None, "request_id": request.state.request_id}
+
+@app.post("/api/v1/models/{model_id}/evaluate")
+async def evaluate_model(model_id: str, payload: ModelEvaluationCreate, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "models.evaluate", payload.project_id)
+    if not container.model_repository: raise FrameworkError("DATABASE_URL is required for model evaluation")
+    model = await container.model_repository.get(model_id)
+    if model is None: raise NotFoundError("Model not found")
+    if model.project_id != payload.project_id: raise FrameworkError("Model does not belong to project")
+    from framework.core.models import Entity, IntentPrediction
+    samples = []
+    for sample in payload.samples:
+        prediction = IntentPrediction(sample.predicted_intent, sample.confidence)
+        entities = [Entity(item["name"], item.get("value"), item.get("confidence", 1.0)) for item in sample.entities]
+        samples.append({"prediction": prediction, "expected_intent": sample.expected_intent, "expected_entities": sample.expected_entities, "entities": entities, "action_success": sample.action_success})
+    result = container.evaluation.evaluate(model.id, model.version, samples)
+    metrics = {"intent_accuracy": result.intent_accuracy, "entity_accuracy": result.entity_accuracy, "fallback_rate": result.fallback_rate, "action_success_rate": result.action_success_rate, "confidence_distribution": result.confidence_distribution, "samples": result.samples}
+    await container.model_repository.update_metrics(model.id, {**dict(model.metrics or {}), "evaluation": metrics})
+    return {"success": True, "data": metrics | {"model_id": result.model_id, "model_version": result.model_version}, "error": None, "request_id": request.state.request_id}
+
+@app.post("/api/v1/models/{model_id}/health")
+async def update_model_health(model_id: str, payload: ModelHealthUpdate, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "models.deploy", payload.project_id)
+    if not container.deployment or not container.model_repository: raise FrameworkError("DATABASE_URL is required for model promotion")
+    model = await container.model_repository.get(model_id)
+    if model is None: raise NotFoundError("Model not found")
+    if model.project_id != payload.project_id: raise FrameworkError("Model does not belong to project")
+    result = await container.deployment.promote_canary(payload.project_id, model_id, payload.healthy, payload.reason)
+    return {"success": True, "data": result.__dict__, "error": None, "request_id": request.state.request_id}
 
 @app.post("/api/v1/models/deploy")
 async def deploy_model(payload: DeploymentCreate, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):

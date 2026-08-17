@@ -16,6 +16,10 @@ class S3ObjectStorage:
         if not settings.bucket: raise ValueError("S3 bucket is required")
         self.settings = settings
         self.client = boto3.client("s3", endpoint_url=settings.endpoint_url, region_name=settings.region, aws_access_key_id=settings.access_key, aws_secret_access_key=settings.secret_key)
+    async def ping(self) -> bool:
+        await asyncio.to_thread(self.client.head_bucket, Bucket=self.settings.bucket)
+        return True
+
     async def put(self, key: str, body: bytes, content_type: str = "application/octet-stream") -> str:
         await asyncio.to_thread(self.client.put_object, Bucket=self.settings.bucket, Key=key, Body=body, ContentType=content_type)
         return f"s3://{self.settings.bucket}/{key}"
