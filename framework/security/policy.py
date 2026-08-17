@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from time import monotonic
 from framework.errors import AuthorizationError
+from framework.infrastructure.redis import RedisProvider
 
 @dataclass(frozen=True)
 class Permission:
@@ -16,6 +17,13 @@ class PermissionService:
         return required in granted or "*" in granted
     def require(self, subject_id: str, required: str) -> None:
         if not self.check(subject_id, required): raise AuthorizationError(f"Missing permission: {required}")
+
+class RedisRateLimiter:
+    def __init__(self, redis: RedisProvider, limit: int = 60, window_seconds: int = 60):
+        self.redis, self.limit, self.window_seconds = redis, limit, window_seconds
+    async def allow(self, key: str) -> bool:
+        count = await self.redis.incr_with_expiry(f"rate:{key}", self.window_seconds)
+        return count <= self.limit
 
 class FixedWindowRateLimiter:
     def __init__(self, limit: int = 60, window_seconds: int = 60):

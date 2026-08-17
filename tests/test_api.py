@@ -84,3 +84,13 @@ def test_message_rejects_insufficient_permission():
     secret = client.post('/api/v1/api-keys', json={'developer_id': developer['id'], 'project_id': project['id'], 'permissions': ['messages.read']}).json()['data']['secret']
     response = client.post('/api/v1/messages', headers={'X-API-Key': secret}, json={'project_id': project['id'], 'user_id': 'u1', 'text': '/start'})
     assert response.status_code == 403
+
+
+def test_invalid_api_payload_uses_standard_error_contract():
+    client = TestClient(app)
+    response = client.post('/api/v1/developers', json={'name': '', 'email': 'not-an-email'})
+    body = response.json()
+    assert response.status_code == 422
+    assert body['success'] is False
+    assert body['error']['code'] == 'VALIDATION_ERROR'
+    assert body['request_id']

@@ -9,7 +9,9 @@ class Settings(BaseSettings):
     database_url: str = "memory://"
     redis_url: str | None = None
     telegram_bot_token: str | None = None
+    telegram_webhook_secret: str | None = None
     rasa_endpoint: str | None = None
+    worker_max_retries: int = 3
     api_key_pepper: str = "development-only-change-me"
     model_config = SettingsConfigDict(env_file=(".env", ".env.development"), extra="ignore")
 

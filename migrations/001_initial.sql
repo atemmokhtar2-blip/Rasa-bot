@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS developers (id VARCHAR(64) PRIMARY KEY, name VARCHAR(255) NOT NULL, email VARCHAR(320) UNIQUE NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS projects (id VARCHAR(64) PRIMARY KEY, owner_id VARCHAR(64) NOT NULL REFERENCES developers(id), name VARCHAR(255) NOT NULL, description TEXT NOT NULL DEFAULT '', environment VARCHAR(32) NOT NULL, status VARCHAR(32) NOT NULL, configuration JSONB NOT NULL DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS ix_projects_owner_id ON projects(owner_id);
+CREATE TABLE IF NOT EXISTS audit_logs (id VARCHAR(64) PRIMARY KEY, event_name VARCHAR(128) NOT NULL, actor_id VARCHAR(64), project_id VARCHAR(64), payload JSONB NOT NULL DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS ix_audit_logs_project_id ON audit_logs(project_id);
+CREATE TABLE IF NOT EXISTS api_keys (id VARCHAR(64) PRIMARY KEY, developer_id VARCHAR(64) NOT NULL REFERENCES developers(id), project_id VARCHAR(64) NOT NULL REFERENCES projects(id), environment VARCHAR(32) NOT NULL, secret_hash VARCHAR(128) UNIQUE NOT NULL, permissions JSONB NOT NULL DEFAULT '[]'::jsonb, status VARCHAR(32) NOT NULL DEFAULT 'active', expires_at TIMESTAMPTZ, last_used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS ix_api_keys_project_id ON api_keys(project_id);
+CREATE INDEX IF NOT EXISTS ix_api_keys_developer_id ON api_keys(developer_id);
+CREATE TABLE IF NOT EXISTS usage_events (id VARCHAR(64) PRIMARY KEY, project_id VARCHAR(64) NOT NULL, metric VARCHAR(64) NOT NULL, quantity INTEGER NOT NULL DEFAULT 1, request_id VARCHAR(128), metadata JSONB NOT NULL DEFAULT '{}'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS ix_usage_events_project_id ON usage_events(project_id);
+CREATE INDEX IF NOT EXISTS ix_usage_events_metric ON usage_events(metric);
