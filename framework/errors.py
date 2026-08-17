@@ -19,6 +19,8 @@ class PluginError(FrameworkError):
     code = "PLUGIN_ERROR"
 class ModelError(FrameworkError):
     code = "MODEL_ERROR"
+class NLUProviderError(ModelError):
+    code = "NLU_PROVIDER_UNAVAILABLE"
 class ActionError(FrameworkError):
     code = "ACTION_ERROR"
 class ToolError(FrameworkError):

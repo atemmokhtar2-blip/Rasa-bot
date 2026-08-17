@@ -1,10 +1,15 @@
 from abc import ABC, abstractmethod
 from typing import Any, Protocol
-from framework.core.models import Entity, IncomingMessage, IntentPrediction, OutgoingResponse
+from framework.core.models import ActionContext, ActionResult, Entity, IncomingMessage, NLUResult, OutgoingResponse, ProcessingContext
 
 class NLUProvider(ABC):
+    async def health(self) -> dict[str, Any]: return {"status": "ready", "provider": self.__class__.__name__}
+    async def analyze(self, message: IncomingMessage, context: ProcessingContext) -> NLUResult:
+        intent = await self.detect_intent(message, context.metadata)
+        entities = await self.extract_entities(message, context.metadata)
+        return NLUResult(intent=intent, entities=entities, provider=self.__class__.__name__)
     @abstractmethod
-    async def detect_intent(self, message: IncomingMessage, context: dict[str, Any]) -> IntentPrediction: ...
+    async def detect_intent(self, message: IncomingMessage, context: dict[str, Any]) -> Any: ...
     @abstractmethod
     async def extract_entities(self, message: IncomingMessage, context: dict[str, Any]) -> list[Entity]: ...
 
@@ -19,7 +24,7 @@ class Action(ABC):
     version: str = "1.0.0"
     required_permissions: set[str] = set()
     @abstractmethod
-    async def execute(self, context: dict[str, Any]) -> OutgoingResponse: ...
+    async def execute(self, context: ActionContext | dict[str, Any]) -> ActionResult | OutgoingResponse: ...
 
 class Tool(ABC):
     name: str

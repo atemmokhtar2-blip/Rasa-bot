@@ -82,7 +82,7 @@ async def health(): return {"success": True, "data": {"status": "healthy", "vers
 
 @app.get("/ready")
 async def ready():
-    dependencies = {"database": "not_configured", "redis": "not_configured", "object_storage": "not_configured", "secret_manager": "not_configured"}
+    dependencies = {"database": "not_configured", "redis": "not_configured", "object_storage": "not_configured", "secret_manager": "not_configured", "nlu": "not_configured", "telegram": "not_configured"}
     if container.database:
         try: await container.database.ping(); dependencies["database"] = "ready"
         except Exception: dependencies["database"] = "unavailable"
@@ -95,6 +95,13 @@ async def ready():
     if hasattr(container.secrets, "ping"):
         try: await container.secrets.ping(); dependencies["secret_manager"] = "ready"
         except Exception: dependencies["secret_manager"] = "unavailable"
+    try:
+        nlu_health = await container.nlu.health(); dependencies["nlu"] = nlu_health.get("status", "unavailable")
+    except Exception: dependencies["nlu"] = "unavailable"
+    try:
+        telegram_health = await TelegramAdapter(settings.telegram_bot_token).health(); dependencies["telegram"] = telegram_health.get("status", "unavailable")
+        if settings.app_env not in {"production", "staging"} and dependencies["telegram"] == "unavailable": dependencies["telegram"] = "not_configured"
+    except Exception: dependencies["telegram"] = "not_configured" if settings.app_env not in {"production", "staging"} else "unavailable"
     status = "ready" if all(value in {"ready", "not_configured"} for value in dependencies.values()) else "not_ready"
     return {"success": status == "ready", "data": {"status": status, "dependencies": dependencies}, "error": None}
 
@@ -377,7 +384,7 @@ async def telegram_webhook(project_id: str, payload: dict, request: Request):
         event_id = await RedisQueue(container.redis.client).publish("telegram_updates", {"project_id": project_id, "payload": payload, "request_id": request.state.request_id})
         return {"success": True, "data": {"accepted": True, "event_id": event_id}, "error": None, "request_id": request.state.request_id}
     message = await adapter.normalize(payload, project_id=project_id)
-    result = await container.engine.process_message(message)
+    result = await container.messages.process(message)
     await adapter.send(result.response, recipient_id=message.chat_id)
     return {"success": True, "data": {"message_id": message.message_id, "intent": result.intent.name if result.intent else None, "trace": result.trace}, "error": None, "request_id": request.state.request_id}
 
@@ -387,5 +394,5 @@ async def process_message(payload: MessageCreate, request: Request, x_api_key: s
     require_permission(record, "messages.write")
     from framework.core.models import IncomingMessage
     message = IncomingMessage(project_id=payload.project_id, channel=payload.channel, user_id=payload.user_id, chat_id=payload.chat_id or payload.user_id, text=payload.text, metadata={"permissions": sorted(record.permissions) if record else []})
-    result = await container.engine.process_message(message)
+    result = await container.messages.process(message)
     return {"success": True, "data": {"text": result.response.text, "intent": result.intent.name if result.intent else None, "confidence": result.intent.confidence if result.intent else None, "entities": [e.__dict__ if hasattr(e, "__dict__") else {"name": e.name, "value": e.value, "confidence": e.confidence} for e in result.entities], "trace": result.trace}, "error": None, "request_id": request.state.request_id}

@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import hmac
 from dataclasses import dataclass, field
@@ -6,11 +7,14 @@ from framework.errors import AuthorizationError, ToolError
 from framework.infrastructure.queue import RedisQueue
 
 class ToolExecutionService:
+    def __init__(self, timeout_seconds: float = 10.0): self.timeout_seconds = timeout_seconds
     async def execute(self, tool: Any, granted_permissions: set[str], **kwargs: Any) -> Any:
         required = set(getattr(tool, "required_permissions", set()))
         missing = required - granted_permissions
         if missing: raise AuthorizationError(f"Missing tool permissions: {sorted(missing)}")
-        try: return await tool.execute(**kwargs)
+        try: return await asyncio.wait_for(tool.execute(**kwargs), timeout=self.timeout_seconds)
+        except asyncio.TimeoutError as exc: raise ToolError(f"Tool execution timed out: {getattr(tool, 'name', 'unknown')}") from exc
+        except ToolError: raise
         except Exception as exc: raise ToolError(f"Tool execution failed: {getattr(tool, 'name', 'unknown')}") from exc
 
 @dataclass

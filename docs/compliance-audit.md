@@ -50,3 +50,9 @@
 ## Honest Acceptance Statement
 
 لا يمكن اعتبار هذا المستودع مطابقًا للمواصفة الكاملة حاليًا؛ الأدق أنه **Foundation V1 متقدمة وقابلة للتشغيل** مع فجوات موثقة في التكاملات والتشغيل المتقدم. أي إعلان بالمطابقة الكاملة قبل إغلاق هذه الفجوات واختبارها على الخدمات الخارجية سيكون غير دقيق.
+
+## Implementation Specification 02 — Phase 2 Verification
+
+تم تنفيذ Core Engine والـ processing contracts وNLUProvider.analyze وRasa normalization وsession/context/dialogue/user/conversation layers وaction/tool/plugin contracts وtyped EventBus وmiddleware/idempotency وMessageApplicationService وcomponent readiness وconfigurable thresholds/timeouts. أضيفت اختبارات `FakeNLUProvider` و`EchoAction` وCore E2E واختبارات unit للـ session/context/events/tools، مع Redis-backed idempotency عند توفر Redis.
+
+التحقق الأخير للمرحلة الثانية: `36 passed, 2 skipped` محليًا، `2 passed` لاختبارات PostgreSQL/Redis الحقيقية، نجاح `alembic upgrade head`، `compileall`، و`git diff --check`. الـ skipped مخصص لتكاملات خارجية غير متاحة في البيئة. لا تزال حدود التشغيل الخارجي موثقة: Telegram/Rasa/S3/Secret Manager/OTLP تحتاج credentials وخدمات فعلية، وإلغاء training الجاري يحتاج control plane موزعًا. لم يتم إنشاء Dataset أو Training Platform جديدة التزامًا ببند No Training Yet.

@@ -1,3 +1,4 @@
+import re
 from typing import Any
 import httpx
 from framework.core.interfaces import ChannelAdapter
@@ -26,6 +27,18 @@ class TelegramAdapter(ChannelAdapter):
             reply_to=str(message.get("reply_to_message", {}).get("message_id")) if message.get("reply_to_message") else None,
             metadata={"telegram": {"update_id": payload.get("update_id"), "raw_message_type": list(message.keys())}},
         )
+
+    async def health(self) -> dict[str, Any]:
+        if not self.token or not re.fullmatch(r"\d+:[A-Za-z0-9_-]+", self.token): return {"status": "not_configured", "channel": self.channel}
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(f"https://api.telegram.org/bot{self.token}/getMe")
+                response.raise_for_status()
+                body = response.json()
+                if not body.get("ok"): return {"status": "unavailable", "channel": self.channel}
+                return {"status": "ready", "channel": self.channel, "bot_id": body.get("result", {}).get("id")}
+        except Exception as exc:
+            return {"status": "unavailable", "channel": self.channel, "error": str(exc)}
 
     async def send(self, response: OutgoingResponse, *, recipient_id: str) -> dict[str, Any]:
         messages = response.rendered_messages()

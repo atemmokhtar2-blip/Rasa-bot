@@ -10,7 +10,7 @@ class PersistentSessionManager(SessionManager):
 
     @staticmethod
     def _to_domain(row: SessionORM) -> Session:
-        return Session(project_id=row.project_id, user_id=row.user_id, conversation_id=row.conversation_id, id=row.id, state=row.state, context=dict(row.context or {}), created_at=row.created_at, updated_at=row.updated_at)
+        return Session(project_id=row.project_id, user_id=row.user_id, conversation_id=row.conversation_id, id=row.id, state=row.state, context=dict(row.context or {}), dialogue=list(row.dialogue or []), created_at=row.created_at, updated_at=row.updated_at)
 
     async def get_or_create(self, project_id: str, user_id: str, conversation_id: str) -> Session:
         async with self.database.session() as db:

@@ -1,6 +1,8 @@
+from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable
 from framework.core.models import Entity
+from framework.errors import ValidationError
 
 @dataclass(frozen=True)
 class IntentDefinition:
@@ -23,13 +25,25 @@ class EntityDefinition:
 
 class IntentRegistry:
     def __init__(self): self._items: dict[str, IntentDefinition] = {}
-    def register(self, intent: IntentDefinition) -> None: self._items[intent.name] = intent
-    def resolve(self, name: str) -> IntentDefinition | None: return self._items.get(name)
+    def validate(self, intent: IntentDefinition) -> None:
+        if not intent.name or not intent.id: raise ValidationError("Intent id and name are required")
+    def register(self, intent: IntentDefinition) -> None: self.validate(intent); self._items[intent.name] = intent
+    def unregister(self, name: str) -> None: self._items.pop(name, None)
+    def get(self, name: str) -> IntentDefinition | None: return self._items.get(name)
+    def resolve(self, name: str) -> IntentDefinition | None: return self.get(name)
+    def exists(self, name: str) -> bool: return name in self._items
+    def list(self) -> list[IntentDefinition]: return list(self._items.values())
     def names(self) -> list[str]: return sorted(self._items)
 
 class EntityRegistry:
     def __init__(self): self._items: dict[str, EntityDefinition] = {}
-    def register(self, entity: EntityDefinition) -> None: self._items[entity.name] = entity
+    def validate(self, entity: EntityDefinition) -> None:
+        if not entity.name: raise ValidationError("Entity name is required")
+    def register(self, entity: EntityDefinition) -> None: self.validate(entity); self._items[entity.name] = entity
+    def unregister(self, name: str) -> None: self._items.pop(name, None)
+    def get(self, name: str) -> EntityDefinition | None: return self._items.get(name)
+    def exists(self, name: str) -> bool: return name in self._items
+    def list(self) -> list[EntityDefinition]: return list(self._items.values())
     def names(self) -> list[str]: return sorted(self._items)
     def normalize_and_validate(self, entities: list[Entity]) -> list[Entity]:
         result = []

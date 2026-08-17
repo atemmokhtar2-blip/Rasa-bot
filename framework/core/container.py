@@ -5,6 +5,7 @@ from framework.core.persistent_state import PersistentSessionManager
 from framework.core.events import EventBus
 from framework.core.registries import ActionRegistry, PluginRegistry, ToolRegistry
 from framework.nlu.base import RuleBasedNLUProvider
+from framework.nlu.rasa import RasaProvider
 from framework.nlu.registry import EntityRegistry, IntentRegistry
 from framework.developers.service import DeveloperService
 from framework.datasets.system import DatasetRegistry
@@ -16,6 +17,7 @@ from framework.observability.metrics import MetricsRegistry
 from framework.observability.tracing import configure_tracing
 from framework.infrastructure.sql import SQLDatabase
 from framework.infrastructure.redis import RedisProvider
+from framework.infrastructure.idempotency import RedisIdempotencyStore
 from framework.infrastructure.cache import RedisCache
 from framework.infrastructure.queue import RedisQueue
 from framework.infrastructure.domain_repositories import BotRepository, DatasetRepository, ModelRepository, TrainingJobRepository
@@ -34,6 +36,7 @@ from framework.plugins.runtime import PluginRuntime
 from framework.plugins.loader import PluginLoader
 from framework.plugins.process_runner import ProcessPluginRunner
 from framework.core.integrations import ToolExecutionService, WebhookRegistry
+from framework.application.messages import MessageApplicationService
 from framework.core.event_delivery import EventSchemaRegistry, QueuedEventPublisher
 
 class ApplicationContainer:
@@ -47,8 +50,8 @@ class ApplicationContainer:
         self.actions = ActionRegistry()
         self.tools = ToolRegistry()
         self.plugins = PluginRegistry()
-        self.nlu = RuleBasedNLUProvider()
-        self.sessions = PersistentSessionManager(self.database) if self.database else SessionManager()
+        self.nlu = RasaProvider(self.settings.rasa_endpoint, self.settings.nlu_timeout) if self.settings.rasa_endpoint else RuleBasedNLUProvider()
+        self.sessions = PersistentSessionManager(self.database, self.settings.session_timeout_minutes) if self.database else SessionManager(self.settings.session_timeout_minutes)
         self.intents = IntentRegistry()
         self.entities = EntityRegistry()
         self.developers = DeveloperService(self.database, self.settings.api_key_pepper)
@@ -56,7 +59,8 @@ class ApplicationContainer:
         self.models = ModelRegistry()
         self.permissions = PermissionService()
         self.redis = RedisProvider(self.settings.redis_url) if self.settings.redis_url else None
-        self.rate_limiter = RedisRateLimiter(self.redis) if self.redis else FixedWindowRateLimiter()
+        self.idempotency = RedisIdempotencyStore(self.redis) if self.redis else None
+        self.rate_limiter = RedisRateLimiter(self.redis, self.settings.rate_limit) if self.redis else FixedWindowRateLimiter(self.settings.rate_limit)
         self.cache = RedisCache(self.redis) if self.redis else None
         self.event_publisher = QueuedEventPublisher(RedisQueue(self.redis.client), self.event_schemas) if self.redis else None
         self.dataset_repository = DatasetRepository(self.database) if self.database else None
@@ -66,7 +70,8 @@ class ApplicationContainer:
         self.usage = UsageMeter(self.database)
         self.metrics = MetricsRegistry()
         self.audit = AuditLogger(self.database)
-        self.engine = FrameworkEngine(self.nlu, self.events, self.actions, usage=self.usage, audit=self.audit, entities=self.entities, sessions=self.sessions)
+        self.engine = FrameworkEngine(self.nlu, self.events, self.actions, intent_threshold=self.settings.intent_low_threshold, usage=self.usage, audit=self.audit, entities=self.entities, sessions=self.sessions, metrics=self.metrics, idempotency=self.idempotency)
+        self.messages = MessageApplicationService(self.engine)
         self.bots = PersistentBotRegistry(self.bot_repository) if self.bot_repository else BotRegistry()
         self.commands = CommandRegistry()
         self.channels = ChannelRegistry()
@@ -78,10 +83,10 @@ class ApplicationContainer:
         self.evaluation = EvaluationEngine()
         self.trainer = RasaTrainer()
         self.deployment = ModelDeploymentService(self.model_repository) if self.model_repository else None
-        self.plugin_runtime = PluginRuntime()
+        self.plugin_runtime = PluginRuntime(self.settings.plugin_timeout)
         self.plugin_loader = PluginLoader()
         self.process_plugin_runner = ProcessPluginRunner()
-        self.tool_execution = ToolExecutionService()
+        self.tool_execution = ToolExecutionService(self.settings.action_timeout)
         self.webhooks = WebhookRegistry()
 
     async def startup(self) -> None:

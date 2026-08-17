@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     telegram_webhook_secret: str | None = None
     rasa_endpoint: str | None = None
     worker_max_retries: int = 3
+    nlu_timeout: float = 10.0
+    intent_high_threshold: float = 0.80
+    intent_low_threshold: float = 0.55
+    session_timeout_minutes: int = 30
+    action_timeout: float = 10.0
+    plugin_timeout: float = 10.0
+    rate_limit: int = 60
     api_key_pepper: str = "development-only-change-me"
     s3_endpoint_url: str | None = None
     s3_bucket: str | None = None
@@ -31,6 +38,8 @@ class Settings(BaseSettings):
             raise ValueError("API_KEY_PEPPER must be replaced outside development")
         if self.app_env == "production" and not self.database_url.startswith(("postgres://", "postgresql://", "postgresql+asyncpg://")):
             raise ValueError("Production requires PostgreSQL DATABASE_URL")
+        if not 0 <= self.intent_low_threshold <= self.intent_high_threshold <= 1: raise ValueError("Invalid intent confidence thresholds")
+        if self.nlu_timeout <= 0 or self.action_timeout <= 0 or self.plugin_timeout <= 0 or self.session_timeout_minutes <= 0 or self.rate_limit <= 0: raise ValueError("Timeouts, session timeout, and rate limit must be positive")
         return self
 
 @lru_cache
