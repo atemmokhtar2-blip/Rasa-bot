@@ -35,13 +35,13 @@
 | Error System | Partial | hierarchy موجودة، لكن request validation/error redaction/centralized observability غير مكتملة. |
 | Logging/Audit | Partial | يوجد basic structured format، لكن لا يوجد trace context كامل أو AuditLog store أو sensitive-data redaction. |
 | Security | Partial | لا توجد secrets في source، وAPI key hash موجود؛ لكن لا يوجد auth/permissions/webhook verification/plugin sandbox/input schemas. |
-| Testing | Partial | 12 اختبارًا ناجحًا تغطي core/events/API/Telegram/state/datasets/models/security primitives؛ لا تزال contract/security/database/plugin integration tests ناقصة. |
+| Testing | Partial | 14 اختبارًا ناجحًا تغطي core/events/API/Telegram/state/datasets/models/security primitives/auth rejection؛ لا تزال contract/security/database/plugin integration tests ناقصة. |
 | Documentation | Partial | توجد architecture/getting-started/implementation plan، لكن لا توجد docs شاملة لكل الأقسام المطلوبة في المواصفة. |
 | Scalability/Deployment | Partial | Docker أساسي موجود، لكن لا يوجد فصل API/worker/database/redis فعلي أو stateless persistence. |
 
 ## Current Status After First Correction Pass
 
-تمت إضافة طبقات Sessions/Context/Dialogue/Policy وDataset/Model registries وPermission/Rate-limit primitives، وأصبحت الاختبارات `12 passed`. هذه الإضافات تقلل الفجوات لكنها لا تحول المشروع إلى مطابقة كاملة.
+تمت إضافة طبقات Sessions/Context/Dialogue/Policy وDataset/Model registries وPermission/Rate-limit primitives، وأصبحت الاختبارات `14 passed`. هذه الإضافات تقلل الفجوات لكنها لا تحول المشروع إلى مطابقة كاملة.
 
 ## Immediate Correction Priority
 
