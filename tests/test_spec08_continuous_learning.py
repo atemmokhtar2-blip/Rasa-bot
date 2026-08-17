@@ -81,3 +81,18 @@ def test_feedback_is_not_ground_truth_and_promotion_requires_gates():
     orchestrator = ContinuousTrainingOrchestrator(minimum_approved_examples=2)
     assert orchestrator.should_trigger(trigger="data_threshold", approved_count=2, error_count=0, dataset_fingerprint="a")[0]
     assert not orchestrator.should_trigger(trigger="data_threshold", approved_count=2, error_count=0, dataset_fingerprint="a")[0]
+
+
+def test_training_data_firewall_blocks_secrets_and_requires_reviewed_sanitized_data():
+    from datetime import datetime, timedelta, timezone
+    from framework.learning.safety import RetentionPolicy, TrainingDataFirewall
+    firewall = TrainingDataFirewall()
+    try:
+        firewall.sanitize(text="api_key=supersecret")
+        assert False
+    except ValueError as exc:
+        assert str(exc) == "TRAINING_DATA_SECRET_DETECTED"
+    sanitized = firewall.sanitize(text="contact me at user@example.com")
+    assert sanitized["pii_redacted"] and "EMAIL_REDACTED" in sanitized["text"]
+    firewall.assert_approved(sample_status="approved", review_status="human_verified", sanitized=True)
+    assert RetentionPolicy(retention_days=1).expired(datetime.now(timezone.utc) - timedelta(days=2))
