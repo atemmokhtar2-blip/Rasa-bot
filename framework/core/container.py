@@ -38,6 +38,9 @@ from framework.models.training import RasaTrainingProvider
 from framework.models.artifacts import ModelArtifactService
 from framework.models.deployment import ModelDeploymentService
 from framework.training import TrainingQueue, LocalArtifactStore, ModelRouter, ConfigurableQualityGate, DeploymentManager
+from framework.learning.continuous import InteractionCollectionService
+from framework.learning.review import HumanReviewService
+from framework.learning.policy import FeedbackService, ContinuousTrainingOrchestrator, ProductionPromotionPolicy
 from framework.plugins.runtime import PluginRuntime
 from framework.plugins.process_runner import ProcessPluginRunner
 from framework.plugins.loader import PluginLoader
@@ -81,6 +84,11 @@ class ApplicationContainer:
         self.models = ModelRegistry()
         self.training_queue = TrainingQueue()
         self.training_jobs_memory: dict[str, dict] = {}
+        self.learning = InteractionCollectionService(low_confidence_threshold=self.settings.intent_low_threshold)
+        self.reviews = HumanReviewService()
+        self.feedback = FeedbackService()
+        self.continuous_training = ContinuousTrainingOrchestrator()
+        self.promotion_policy = ProductionPromotionPolicy()
         self.artifact_store = LocalArtifactStore(self.settings.training_artifact_root)
         self.model_router = ModelRouter()
         self.quality_gate = ConfigurableQualityGate()

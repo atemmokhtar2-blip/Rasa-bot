@@ -14,7 +14,10 @@ from framework.observability import AuditEvent
 from framework.observability.tracing import span
 from framework.actions.base import HelpAction, StartAction
 from framework.api.auth import authenticate_api_request, require_permission
-from framework.api.schemas import APIKeyCreate, DatasetCreate, DatasetValidateRequest, DatasetVersionCreate, DeploymentCreate, DeveloperCreate, MessageCreate, ModelComparisonRequest, ModelDeploymentRequest, ModelEvaluationCreate, ModelHealthUpdate, ModelRuntimeServeRequest, ModelVersionCreate, ProjectCreate, ProjectUpdate, ThresholdOptimizationRequest, TrainingCreate
+from framework.api.schemas import APIKeyCreate, CandidateCreate, CandidateTransition, ConflictResolve, DatasetCreate, DatasetValidateRequest, DatasetVersionCreate, DeploymentCreate, DeveloperCreate, FeedbackCreate, InteractionCollect, MessageCreate, ModelComparisonRequest, ModelDeploymentRequest, ModelEvaluationCreate, ModelHealthUpdate, ModelRuntimeServeRequest, ModelVersionCreate, ProjectCreate, ProjectUpdate, ReviewCreate, ThresholdOptimizationRequest, TrainingCreate
+from framework.learning.continuous import CandidateStatus, SampleStatus
+from framework.learning.review import ReviewDecision
+from framework.learning.policy import FeedbackType
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -200,6 +203,71 @@ async def create_api_key(payload: APIKeyCreate, request: Request):
     created = await container.developers.create_api_key(payload.developer_id, payload.project_id, payload.environment, payload.permissions, name=payload.name, key_type=payload.key_type, expires_at=payload.expires_at, metadata=payload.metadata)
     await container.audit.record(AuditEvent("API_KEY_CREATED", actor_id=payload.developer_id, project_id=payload.project_id, changes={"key_id": created.key_id, "prefix": created.prefix, "environment": created.environment, "key_type": created.key_type, "permissions": sorted(payload.permissions)}))
     return {"success": True, "data": {"key_id": created.key_id, "secret": created.secret, "prefix": created.prefix, "project_id": created.project_id, "environment": created.environment, "key_type": created.key_type}, "error": None, "request_id": request.state.request_id}
+
+@app.post("/api/v1/feedback")
+async def create_feedback(payload: FeedbackCreate, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "learning.write", payload.project_id)
+    item = container.feedback.record(project_id=payload.project_id, interaction_id=payload.interaction_id, feedback_type=FeedbackType(payload.type), intent=payload.intent, entities=tuple(payload.entities), source=payload.source, trusted=payload.trusted)
+    await container.audit.record(AuditEvent("LEARNING_FEEDBACK_RECORDED", project_id=payload.project_id, changes={"feedback_id": item.feedback_id, "interaction_id": item.interaction_id, "type": item.feedback_type.value, "trusted": item.trusted}))
+    return {"success": True, "data": {**item.__dict__, "feedback_type": item.feedback_type.value, "created_at": item.created_at.isoformat()}, "error": None, "request_id": request.state.request_id}
+
+@app.get("/api/v1/projects/{project_id}/feedback")
+async def list_feedback(project_id: str, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "learning.read", project_id)
+    return {"success": True, "data": [{**item.__dict__, "feedback_type": item.feedback_type.value, "created_at": item.created_at.isoformat()} for item in container.feedback.list_project(project_id)], "error": None, "request_id": request.state.request_id}
+
+@app.post("/api/v1/learning/interactions")
+async def collect_learning_interaction(payload: InteractionCollect, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize_any(request, x_api_key, ("learning.write", "messages.write"), payload.project_id)
+    record = container.learning.collect(project_id=payload.project_id, session_id=payload.session_id, language=payload.language, input_text=payload.input, predicted_intent=payload.predicted_intent, confidence=payload.confidence, entities=payload.entities, response=payload.response, model_version=payload.model_version, processing_time_ms=payload.processing_time, status=payload.status, metadata=payload.metadata)
+    await container.audit.record(AuditEvent("LEARNING_INTERACTION_COLLECTED", project_id=payload.project_id, changes={"interaction_id": record.interaction_id, "model_version": payload.model_version, "status": payload.status}))
+    return {"success": True, "data": record.to_dict(), "error": None, "request_id": request.state.request_id}
+
+@app.post("/api/v1/learning/candidates")
+async def create_learning_candidate(payload: CandidateCreate, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "learning.write", payload.project_id)
+    candidate = container.learning.candidate_from_interaction(payload.interaction_id, project_id=payload.project_id, suggested_intent=payload.suggested_intent, context=payload.context, quality_score=payload.quality_score)
+    return {"success": True, "data": {**candidate.__dict__, "status": candidate.status.value, "sample_status": candidate.sample_status.value, "created_at": candidate.created_at.isoformat()}, "error": None, "request_id": request.state.request_id}
+
+@app.get("/api/v1/projects/{project_id}/learning/candidates")
+async def list_learning_candidates(project_id: str, request: Request, status: str | None = None, sample_status: str | None = None, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "learning.read", project_id)
+    candidate_status = CandidateStatus(status) if status else None
+    lifecycle_status = SampleStatus(sample_status) if sample_status else None
+    rows = container.learning.list_candidates(project_id, status=candidate_status, sample_status=lifecycle_status)
+    data = [{**row.__dict__, "status": row.status.value, "sample_status": row.sample_status.value, "created_at": row.created_at.isoformat()} for row in rows]
+    return {"success": True, "data": data, "error": None, "request_id": request.state.request_id}
+
+@app.post("/api/v1/learning/candidates/{sample_id}/transition")
+async def transition_learning_candidate(sample_id: str, payload: CandidateTransition, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "learning.review", payload.project_id)
+    candidate = container.learning.transition_candidate(sample_id, project_id=payload.project_id, status=CandidateStatus(payload.status), sample_status=SampleStatus(payload.sample_status))
+    await container.audit.record(AuditEvent("LEARNING_CANDIDATE_TRANSITIONED", project_id=payload.project_id, changes={"sample_id": sample_id, "status": payload.status, "sample_status": payload.sample_status}))
+    return {"success": True, "data": {**candidate.__dict__, "status": candidate.status.value, "sample_status": candidate.sample_status.value, "created_at": candidate.created_at.isoformat()}, "error": None, "request_id": request.state.request_id}
+
+@app.post("/api/v1/learning/reviews")
+async def create_learning_review(payload: ReviewCreate, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "learning.review", payload.project_id)
+    review = container.reviews.review(project_id=payload.project_id, sample_id=payload.sample_id, reviewer_id=payload.reviewer_id, decision=ReviewDecision(payload.decision), corrected_intent=payload.corrected_intent, corrected_entities=tuple(payload.corrected_entities), notes=payload.notes, context=payload.context)
+    await container.audit.record(AuditEvent("LEARNING_REVIEW_CREATED", actor_id=payload.reviewer_id, project_id=payload.project_id, changes={"review_id": review.review_id, "sample_id": review.sample_id, "decision": review.decision.value, "annotation_version": review.annotation_version}))
+    if review.decision in {ReviewDecision.APPROVE, ReviewDecision.CORRECT}:
+        candidate_status = CandidateStatus.APPROVED
+        sample_status = SampleStatus.APPROVED
+        try: container.learning.transition_candidate(payload.sample_id, project_id=payload.project_id, status=candidate_status, sample_status=sample_status)
+        except KeyError: pass
+    return {"success": True, "data": {**review.__dict__, "decision": review.decision.value, "created_at": review.created_at.isoformat()}, "error": None, "request_id": request.state.request_id}
+
+@app.get("/api/v1/projects/{project_id}/learning/conflicts")
+async def list_learning_conflicts(project_id: str, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "learning.review", project_id)
+    return {"success": True, "data": [item.__dict__ for item in container.reviews.list_conflicts(project_id)], "error": None, "request_id": request.state.request_id}
+
+@app.post("/api/v1/learning/conflicts/{conflict_id}/resolve")
+async def resolve_learning_conflict(conflict_id: str, payload: ConflictResolve, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    await authorize(request, x_api_key, "learning.review", payload.project_id)
+    conflict = container.reviews.resolve(conflict_id, project_id=payload.project_id, resolver_id=payload.resolver_id, intent=payload.intent, policy=payload.policy)
+    await container.audit.record(AuditEvent("LEARNING_CONFLICT_RESOLVED", actor_id=payload.resolver_id, project_id=payload.project_id, changes={"conflict_id": conflict_id, "intent": payload.intent, "policy": payload.policy}))
+    return {"success": True, "data": conflict.__dict__, "error": None, "request_id": request.state.request_id}
 
 @app.post("/api/v1/datasets")
 async def create_dataset(payload: DatasetCreate, request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")):
@@ -557,6 +625,10 @@ async def deploy_model_version(payload: ModelDeploymentRequest, request: Request
     if model is None: raise NotFoundError("Model not found")
     if model.project_id != payload.project_id: raise FrameworkError("Model does not belong to project")
     if model.status not in {"ready", "deployed"}: raise FrameworkError("Model quality gate must pass before deployment")
+    evaluation_report = dict(model.evaluation_report or {})
+    quality = dict(evaluation_report.get("quality_gate", {})); regression = evaluation_report.get("evaluation", {}).get("regression_passed", True)
+    decision = container.promotion_policy.decide(quality_passed=quality.get("passed", True), regression_passed=regression is not False, human_approved=payload.human_approved, auto_deploy=payload.auto_deploy, failures=quality.get("failures", []))
+    if payload.environment == "production" and not decision.passed: raise FrameworkError(f"Model promotion rejected: {', '.join(decision.failures)}")
     rows = await container.model_repository.list_project(payload.project_id)
     previous = next((item for item in rows if item.deployment_environment == payload.environment and item.status == "deployed" and item.id != model.id), None)
     if previous:
